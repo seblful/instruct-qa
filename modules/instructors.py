@@ -8,8 +8,6 @@ from pdfminer.high_level import extract_pages, extract_text
 from pdfminer.layout import LTTextContainer, LTChar, LTRect, LTFigure
 import pdfplumber
 
-import layoutparser as lp
-
 
 class Instruct:
     def __init__(self,
@@ -96,27 +94,3 @@ class InstructsOCR:
     def predict(self, instruct):
         assert isinstance(
             instruct, Instruct), "Input for OCR prediction must be instance of Instruct class."
-
-        pdf_path = instruct.pdf_path
-
-        for pagenum, page in enumerate(extract_pages(pdf_path)):
-            print(pagenum, page)
-
-            # Create vars to store data
-            page_text = []
-            line_format = []
-            text_from_images = []
-            text_from_tables = []
-            page_content = []
-
-            # Инициализируем количество исследованных таблиц
-            table_num = 0
-            first_element = True
-            table_extraction_flag = False
-
-            # Открываем файл pdf
-            pdf = pdfplumber.open(pdf_path)
-            # Находим исследуемую страницу
-            page_tables = pdf.pages[pagenum]
-            # Находим количество таблиц на странице
-            tables = page_tables.find_tables()
