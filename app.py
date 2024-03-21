@@ -11,7 +11,7 @@ def main():
     pdf_url = 'https://www.rceth.by/NDfiles/instr/21_07_3165_i.pdf'
     instruct = Instruct(instr_dir=INSTR_DIR,
                         pdf_url=pdf_url)  # , pdf_path=pdf_path)
-    print(instruct.pdf_path)
+    print(instruct.instr_imgs[2].save('test_image.jpg'))
 
     image = instruct.instr_imgs[0]
 
