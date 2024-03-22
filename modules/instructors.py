@@ -4,9 +4,6 @@ import requests
 import re
 
 from pypdf import PdfReader
-from pdfminer.high_level import extract_pages, extract_text
-from pdfminer.layout import LTTextContainer, LTChar, LTRect, LTFigure
-import pdfplumber
 
 
 class Instruct:
