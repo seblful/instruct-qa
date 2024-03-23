@@ -1,37 +1,28 @@
 import os
+import io
 from PIL import Image
 import numpy as np
 import random
 
 import fitz
-from pypdf import PdfReader
-
-from tqdm import tqdm
 
 
-def get_avail_instr_images(save_listdir):
-    avail_instr_images = {}
+def get_image(pdf_file, pdf_page):
+    # Get image from pdf page and transform it to bytes image
+    fitz_image = pdf_page.get_images(full=False)[0]
+    base_image = pdf_file.extract_image(fitz_image[0])
+    bytes_image = base_image["image"]
 
-    for image_name in save_listdir:
-        image_name = os.path.splitext(image_name)[0]
-        instr_name = image_name[:-2]
-        image_index = int(image_name[-1])
+    # Get the image extension
+    image_ext = base_image["ext"]
 
-        avail_instr_images[instr_name] = avail_instr_images.get(
-            instr_name, []) + [image_index]
+    # Load it to PIL Image and reformat it
+    image = Image.open(io.BytesIO(bytes_image))
 
-    return avail_instr_images
+    if image_ext != 'jpg':
+        image = image.convert('RGB')
 
-
-def get_instr_len_images(instr_dir, instr_listdir):
-    instr_len_images = {}
-
-    for pdf_path in instr_listdir:
-        full_pdf_path = os.path.join(instr_dir, pdf_path)
-        pdf_file = fitz.open(full_pdf_path)
-        instr_len_images[pdf_path] = len(pdf_file)
-
-    return instr_len_images
+    return image
 
 
 def create_train_data(instr_dir,
@@ -40,73 +31,29 @@ def create_train_data(instr_dir,
     instr_listdir = [instr for instr in os.listdir(
         instr_dir) if instr.endswith('pdf')]
 
-    save_listdir = [instr for instr in os.listdir(
-        save_dir)]
+    num_saved_images = 0
 
-    avail_instr_images = get_avail_instr_images(save_listdir=save_listdir)
+    while num_images != num_saved_images:
 
-    instr_len_images = get_instr_len_images(instr_dir, instr_listdir)
+        # Take random instruction
+        rand_instr = random.choice(instr_listdir)
+        rand_instr_name = os.path.splitext(rand_instr)[0]
+        rand_instr_path = os.path.join(instr_dir, rand_instr)
+        rand_instr_pdf = fitz.open(rand_instr_path)
 
-    print(instr_len_images)
+        # Take random instruction page and image
+        rand_page_ind = random.randint(0, len(rand_instr_pdf) - 1)
+        rand_page = rand_instr_pdf[rand_page_ind]
 
-    # num_saved_images = 0
+        rand_image = get_image(pdf_file=rand_instr_pdf,
+                               pdf_page=rand_page)
 
-    # while num_images != num_saved_images:
+        rand_image_name = f"{rand_instr_name}_{rand_page_ind}.jpg"
+        rand_image_path = os.path.join(save_dir, rand_image_name)
 
-    #     # Take random instruction
-    #     rand_instr = random.choice(instr_listdir)
-    #     rand_instr_name = os.path.splitext(rand_instr)[0]
-    #     rand_instr_path = os.path.join(instr_dir, rand_instr)
-    #     rand_instr_pdf = PdfReader(rand_instr_path)
+        if not os.path.exists(rand_image_path):
+            rand_image.save(rand_image_path, "JPEG")
+            num_saved_images += 1
+            print(f"It was saved {num_saved_images}/{num_images} images.")
 
-    #     # Take random instruction page and image
-    #     rand_page = random.choice(rand_instr_pdf.pages)
-    #     rand_page_ind = rand_instr_pdf.pages.index(rand_page)
-    #     rand_image = rand_page.images[0].image
-
-    #     rand_image_name = f"{rand_instr_name}_{rand_page_ind}.png"
-    #     rand_image_path = os.path.join(save_dir, rand_image_name)
-
-    #     if not os.path.exists(rand_image_path):
-    #         # rand_image.show()
-    #         # if rand_image.mode != "RGB":
-    #         #     rand_image = rand_image.convert('RGB')
-
-    #         # if rand_image.mode == 'CMYK':
-    #         #     imgData = np.array(rand_image)
-    #         #     # Inverting the CMYK data
-    #         #     invData = 255 - imgData
-    #         #     img = Image.fromarray(invData, mode='CMYK')
-    #         #     rand_image = rand_image.convert('RGB')
-
-    #         rand_image.save(rand_image_path, "PNG")
-    #         num_saved_images += 1
-    #         print(f"It was saved {num_saved_images}/{num_images} images.")
-
-# import fitz  # PyMuPDF
-# import io
-# from PIL import Image
-
-# # Open the PDF file
-# pdf_file = fitz.open('your_file.pdf')
-
-# # Iterate over PDF pages
-# for page_num in range(len(pdf_file)):
-#     # Get the page
-#     page = pdf_file[page_num]
-
-#     # Iterate over page images
-#     for img_index, img in enumerate(page.get_images(full=True)):
-#         # Extract image bytes
-#         base_image = pdf_file.extract_image(img[0])
-#         image_bytes = base_image["image"]
-
-#         # Get the image extension
-#         image_ext = base_image["ext"]
-
-#         # Load it to PIL Image and save it
-#         image = Image.open(io.BytesIO(image_bytes))
-#         image.save(f"image{page_num + 1}_{img_index + 1}.{image_ext}")
-
-# # Close the PDF after extraction
-# pdf_file.close()
+        rand_instr_pdf.close()
