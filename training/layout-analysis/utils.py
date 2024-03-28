@@ -104,6 +104,10 @@ def create_train_data_manually(instr_dir,
                 image_path = os.path.join(save_dir, image_name)
                 if not os.path.exists(image_path):
                     image.save(image_path, "JPEG")
+                    print(f"Image {image_name} was saved.")
+
+                else:
+                    print(f"Image {image_name} was saved before.")
 
             # Skip one instruction if B is pressed
             elif pressed_key in [66, 98, 200, 232]:
