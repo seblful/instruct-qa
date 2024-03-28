@@ -27,28 +27,6 @@ def get_image(pdf_file, pdf_page):
     return image
 
 
-def resize_image(image, new_width=None, new_height=None):
-    # Get the original image dimensions
-    height, width = image.shape[:2]
-
-    if new_width is None and new_height is None:
-        return image  # No resizing needed
-
-    if new_width is None:
-        # Calculate the aspect ratio and resize based on the new height
-        aspect_ratio = new_height / height
-        new_width = int(width * aspect_ratio)
-    else:
-        # Calculate the aspect ratio and resize based on the new width
-        aspect_ratio = new_width / width
-        new_height = int(height * aspect_ratio)
-
-    # Perform the resizing while maintaining the aspect ratio
-    resized_image = cv2.resize(image, (new_width, new_height))
-
-    return resized_image
-
-
 def create_train_data(instr_dir,
                       save_dir,
                       num_images):
@@ -106,8 +84,15 @@ def create_train_data_manually(instr_dir,
                               pdf_page=page)
 
             # Show image
-            image_to_show = resize_image(np.array(image), new_height=1000)
-            cv2.imshow("PDF Image", image_to_show)
+            # image_to_show = cv2.blur(np.array(image), ksize=(4, 4))
+            image_to_show = cv2.GaussianBlur(np.array(image), (5, 5), 4)
+
+            # Create a named window
+            cv2.namedWindow('PDF Image', cv2.WINDOW_NORMAL)
+            # Show the image in the window
+            cv2.imshow('PDF Image', image_to_show)
+            # Resize the window to the desired size smaller than the image
+            cv2.resizeWindow('PDF Image', 565, 800)
 
             # Handle pressed keys
             pressed_key = cv2.waitKey(0) & 0xFF
