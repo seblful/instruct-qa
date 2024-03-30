@@ -1,5 +1,10 @@
 instructions
 
+# Training
+runs
+yolov8*.pt
+
 training/layout-analysis/data
+
 
 __pycache__
