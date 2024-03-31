@@ -4,7 +4,7 @@ instructions
 runs
 yolov8*.pt
 
-training/layout-analysis/data
-
+training/layout-analysis-yolo/data
+training/layout-analysis-segformer/data
 
 __pycache__
