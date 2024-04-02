@@ -1,6 +1,6 @@
 import os
 import json
-
+import copy
 import math
 import numpy as np
 
@@ -135,6 +135,35 @@ class LSLabelFormatter:
 
         return polygon
 
+    def fill_value(self,
+                   value,
+                   polygon):
+
+        # Make a copy of value
+        value = copy.deepcopy(value)
+
+        # Clear value
+        value.clear()
+
+        # Fill by new values
+        value['points'] = polygon.points
+        value['closed'] = True
+        value['polygonlabels'] = [polygon.label]
+
+        return value
+
+    def fill_result(self,
+                    result,
+                    value):
+        # Make a copy of result
+        result = copy.deepcopy(result)
+
+        # Fill by new values
+        result['value'] = value
+        result['type'] = 'polygonlabels'
+
+        return result
+
     def convert_or_bbox_to_polygon(self,
                                    json_input_path):
 
@@ -149,8 +178,12 @@ class LSLabelFormatter:
             # Retrieve results
             result = task['annotations'][0]['result']
 
+            # Create blank list to store result
+            new_result = []
+
             # Process if result is not blank
             if result:
+
                 # Retrieve ids
                 task_id, annotation_id, by_id = self.get_ids(task)
 
@@ -166,9 +199,14 @@ class LSLabelFormatter:
                                                 rotation=value['rotation'],
                                                 label=value['rectanglelabels'][0])
 
+                    # Transform oriented bbox to polygon and append it to polygons
                     polygon = self.transform_or_bbox_to_polygon(rect_label)
-                    print(polygon)
 
-                # results = self.fill_results(task, polygons, name_of_object)
+                    # Fill value and result
+                    value = self.fill_value(value, polygon)
+                    res = self.fill_result(res, value)
 
-                break
+                    # Append res to new result
+                    new_result.append(res)
+
+                print(new_result)
