@@ -1,9 +1,54 @@
 import os
 import json
 
+import math
+import numpy as np
 
-class Label:
-    pass
+from abc import ABC, abstractmethod
+
+
+class Label(ABC):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def __repr__(self):
+        pass
+
+    @property
+    @abstractmethod
+    def tuple_points(self):
+        pass
+
+
+class RectangleLabel(Label):
+    def __init__(self,
+                 x,
+                 y,
+                 width,
+                 height,
+                 rotation,
+                 label):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.rotation = rotation
+        self.label = label
+
+        self.__tuple_points = None
+
+    def __repr__(self) -> str:
+        return f"RectangleLabel: x={self.x}, y={self.y}, width={self.width}, height={self.height}, label='{self.label}'"
+
+    @property
+    def tuple_points(self):
+        if self.__tuple_points is None:
+            self.__tuple_points = (
+                self.x, self.y, self.width, self.height, self.rotation)
+
+        return self.__tuple_points
 
 
 class PolygonLabel:
@@ -15,11 +60,10 @@ class BrushLabel:
 
 
 class LSLabelFormatter:
-    def __init__(self,
-                 json_input_path,
-                 json_output_path):
+    def __init__(self):
 
-        json_input_dict = self.read_json(json_input_path)
+        # json_input_dict = self.read_json(json_input_path)
+        pass
 
     def read_json(self, json_input_path):
 
@@ -34,30 +78,76 @@ class LSLabelFormatter:
 
         return None
 
-    def convert_bb_to_polygon(self):
-        # Extract the necessary values from the bounding box label
-        x = bbox_label['value']['x']
-        y = bbox_label['value']['y']
-        width = bbox_label['value']['width']
-        height = bbox_label['value']['height']
-        label = bbox_label['value']['rectanglelabels'][0]
+    def get_ids(self, task):
+        task_id = task['id']
+        annotation_id = task['annotations'][0]['id']
+        by_id = task['annotations'][0]['completed_by']
 
-        # Calculate the coordinates of the four corners of the bounding box
-        top_left = [x, y]
-        top_right = [x + width, y]
-        bottom_right = [x + width, y + height]
-        bottom_left = [x, y + height]
+        return task_id, annotation_id, by_id
 
-        # Create the polygon label format
-        polygon_label = {
-            "original_width": bbox_label['original_width'],
-            "original_height": bbox_label['original_height'],
-            "image_rotation": bbox_label['image_rotation'],
-            "value": {
-                # Closed polygon
-                "points": [top_left, top_right, bottom_right, bottom_left, top_left],
-                "polygonlabels": [label]
-            }
-        }
+    def get_image_size(self, result):
+        image_width = result[0]['original_width']
+        image_height = result[0]['original_height']
 
-        return polygon_label
+        return image_width, image_height
+
+    def transform_or_bbox_to_polygon(self, rect_label):
+        # Get points
+        x, y, w, h, rotation = rect_label.tuple_points
+        # Calculate the coordinates of the four corners of the rectangle
+
+        # Calculate angle and corners
+        angle = np.radians(rotation)
+        corners = np.array([[-w/2, -h/2],
+                            [w/2, -h/2],
+                            [w/2, h/2],
+                            [-w/2, h/2]])
+
+        # Rotation matrix
+        rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
+                                    [np.sin(angle), np.cos(angle)]])
+
+        # Rotate the corners around the center of the rectangle
+        center = np.array([x, y])
+        rotated_corners = np.dot(corners, rotation_matrix.T) + center
+
+        return rotated_corners
+
+    def convert_or_bbox_to_polygon(self,
+                                   json_input_path):
+
+        # Read json input
+        json_input = self.read_json(json_input_path)
+
+        # Create blank list for dicts
+        json_output = []
+
+        # Iterating through tasks
+        for index, task in enumerate(json_input):
+            # Retrieve results
+            result = task['annotations'][0]['result']
+
+            # Process if result is not blank
+            if result:
+                # Retrieve ids
+                task_id, annotation_id, by_id = self.get_ids(task)
+
+                # Iterating through results
+                for res in result:
+                    # Get value from result
+                    value = res['value']
+                    # Create RectangleLabel instance
+                    rect_label = RectangleLabel(x=value['x'],
+                                                y=value['y'],
+                                                width=value['width'],
+                                                height=value['height'],
+                                                rotation=value['rotation'],
+                                                label=value['rectanglelabels'][0])
+
+                    polygon = self.transform_or_bbox_to_polygon(rect_label)
+                    print(polygon)
+                    break
+
+                # results = self.fill_results(task, polygons, name_of_object)
+
+                break
