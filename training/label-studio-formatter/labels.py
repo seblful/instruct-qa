@@ -90,18 +90,13 @@ class LSLabelFormatter:
 
         return json_dict
 
-    def write_json(json_output_path, json_dict):
+    def write_json(self,
+                   json_output_path,
+                   json_dict):
         with open(json_output_path, "w") as json_file_output:
             json.dump(json_dict, json_file_output)
 
         return None
-
-    def get_ids(self, task):
-        task_id = task['id']
-        annotation_id = task['annotations'][0]['id']
-        by_id = task['annotations'][0]['completed_by']
-
-        return task_id, annotation_id, by_id
 
     def get_image_size(self, result):
         image_width = result[0]['original_width']
@@ -159,13 +154,15 @@ class LSLabelFormatter:
         result = copy.deepcopy(result)
 
         # Fill by new values
+        result['id'] = result['id'] + '-N'
         result['value'] = value
         result['type'] = 'polygonlabels'
 
         return result
 
     def convert_or_bbox_to_polygon(self,
-                                   json_input_path):
+                                   json_input_path,
+                                   json_output_path):
 
         # Read json input
         json_input = self.read_json(json_input_path)
@@ -174,19 +171,16 @@ class LSLabelFormatter:
         json_output = []
 
         # Iterating through tasks
-        for index, task in enumerate(json_input):
-            # Retrieve results
-            result = task['annotations'][0]['result']
+        for i, task in enumerate(json_input):
+            # Retrieve annotations and results
+            annotation = task['annotations'][0]
+            result = annotation['result']
 
             # Create blank list to store result
             new_result = []
 
             # Process if result is not blank
             if result:
-
-                # Retrieve ids
-                task_id, annotation_id, by_id = self.get_ids(task)
-
                 # Iterating through results
                 for res in result:
                     # Get value from result
@@ -209,4 +203,16 @@ class LSLabelFormatter:
                     # Append res to new result
                     new_result.append(res)
 
-                print(new_result)
+            else:
+                # Clear and write empty
+                pass
+
+            # Edit annotation and task and append it to json output
+            annotation = copy.deepcopy(annotation)
+            task = copy.deepcopy(task)
+            annotation['result'] = new_result
+            task['annotations'] = annotation
+            json_output.append(task)
+
+        # Write json to file
+        self.write_json(json_output_path, json_output)
