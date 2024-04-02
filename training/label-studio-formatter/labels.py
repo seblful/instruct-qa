@@ -46,13 +46,31 @@ class RectangleLabel(Label):
     def tuple_points(self):
         if self.__tuple_points is None:
             self.__tuple_points = (
-                self.x, self.y, self.width, self.height, self.rotation)
+                self.x, self.y, self.width, self.height, self.rotation, self.label)
 
         return self.__tuple_points
 
 
 class PolygonLabel:
-    pass
+    def __init__(self,
+                 points,
+                 label):
+        self.points = points
+        self.label = label
+
+        self.__tuple_points = None
+        pass
+
+    def __repr__(self):
+        return f"PolygonLabel: points={self.points}, label='{self.label}'"
+
+    @property
+    def tuple_points(self):
+        if self.__tuple_points is None:
+            self.__tuple_points = tuple([tuple(points)
+                                        for points in self.points])
+
+        return self.__tuple_points
 
 
 class BrushLabel:
@@ -93,7 +111,7 @@ class LSLabelFormatter:
 
     def transform_or_bbox_to_polygon(self, rect_label):
         # Get points
-        x, y, w, h, rotation = rect_label.tuple_points
+        x, y, w, h, rotation, label = rect_label.tuple_points
         # Calculate the coordinates of the four corners of the rectangle
 
         # Calculate angle and corners
@@ -108,10 +126,14 @@ class LSLabelFormatter:
                                     [np.sin(angle), np.cos(angle)]])
 
         # Rotate the corners around the center of the rectangle
-        center = np.array([x, y])
+        center = np.array([x + w/2, y + h/2])
         rotated_corners = np.dot(corners, rotation_matrix.T) + center
 
-        return rotated_corners
+        # Create PolygonLabel object
+        polygon = PolygonLabel(points=rotated_corners.tolist(),
+                               label=label)
+
+        return polygon
 
     def convert_or_bbox_to_polygon(self,
                                    json_input_path):
@@ -146,7 +168,6 @@ class LSLabelFormatter:
 
                     polygon = self.transform_or_bbox_to_polygon(rect_label)
                     print(polygon)
-                    break
 
                 # results = self.fill_results(task, polygons, name_of_object)
 
