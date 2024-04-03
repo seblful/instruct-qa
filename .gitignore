@@ -7,4 +7,6 @@ yolov8*.pt
 training/layout-analysis-yolo/data
 training/layout-analysis-segformer/data
 
+training/label-studio-formatter/outputs
+
 __pycache__
