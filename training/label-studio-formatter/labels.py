@@ -136,6 +136,31 @@ class LSLabelFormatter:
 
         return polygon
 
+    import math
+
+    # def obb_to_polygon(x, y, w, h, rotation):
+    #     # Convert degrees to radians for rotation
+    #     angle_rad = math.radians(rotation)
+
+    #     # Calculate the half-diagonal
+    #     half_diagonal = math.sqrt(w**2 + h**2) / 2
+
+    #     # Calculate the angle to the corner
+    #     theta = math.atan2(h, w)
+
+    #     # Calculate the offset for each corner
+    #     offset_dx = half_diagonal * math.cos(angle_rad + theta)
+    #     offset_dy = half_diagonal * math.sin(angle_rad + theta)
+
+    #     # Calculate the coordinates for each corner
+    #     corner_1 = (x - offset_dx, y - offset_dy)
+    #     corner_2 = (x + offset_dy, y - offset_dx)
+    #     corner_3 = (x + offset_dx, y + offset_dy)
+    #     corner_4 = (x - offset_dy, y + offset_dx)
+
+    #     # Return the polygon as a list of points
+    #     return [corner_1, corner_2, corner_3, corner_4]
+
     def fill_value(self,
                    value,
                    polygon):
