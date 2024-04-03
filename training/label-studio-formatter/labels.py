@@ -1,6 +1,7 @@
 import os
 import json
 import copy
+from PIL import Image, ImageDraw
 import math
 import numpy as np
 
@@ -67,8 +68,7 @@ class PolygonLabel:
     @property
     def tuple_points(self):
         if self.__tuple_points is None:
-            self.__tuple_points = tuple([tuple(points)
-                                        for points in self.points])
+            self.__tuple_points = [tuple(points) for points in self.points]
 
         return self.__tuple_points
 
@@ -191,6 +191,26 @@ class LSLabelFormatter:
 
         return result
 
+    def visualize_polygons(self,
+                           image_path,
+                           polygon):
+        # Create an image with white background
+        image = Image.open(image_path)
+        width, height = image.size
+
+        # Initialize the drawing context with the image as background
+        draw = ImageDraw.Draw(image, 'RGBA')
+
+        # Format points to relative coordinates
+        points = [(x * width / 100, y * height / 100)
+                  for x, y in polygon.points]
+
+        # Draw the polygon
+        draw.polygon(points, fill=(255, 0, 0, 125))
+
+        # Display the image
+        image.show()
+
     def convert_or_bbox_to_polygon(self,
                                    json_input_path,
                                    json_output_path):
@@ -244,6 +264,10 @@ class LSLabelFormatter:
             annotation['result'] = new_result
             task['annotations'] = [annotation]
             json_output.append(task)
+
+            if task["file_upload"] == "b9fe78e4-16_12_730_p_0.jpg":
+                self.visualize_polygons(image_path="outputs/16_12_730_p_0.jpg",
+                                        polygon=polygon)
 
         # Write json to file
         self.write_json(json_output_path, json_output)
