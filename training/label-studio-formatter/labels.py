@@ -107,8 +107,8 @@ class LSLabelFormatter:
     def transform_or_bbox_to_polygon(self, rect_label):
         # Get points
         x, y, w, h, rotation, label = rect_label.tuple_points
-        # Calculate the coordinates of the four corners of the rectangle
 
+        # Calculate the coordinates of the four corners of the rectangle
         # Calculate angle and corners
         angle = np.radians(rotation)
         corners = np.array([[-w/2, h/2],
@@ -122,6 +122,9 @@ class LSLabelFormatter:
 
         # Rotate the corners around the center of the rectangle
         center = np.array([x + w/2, y + h/2])
+        print(x, w)
+        print(y, h)
+        print(center)
         rotated_corners = np.dot(corners, rotation_matrix) + center
 
         # Create PolygonLabel object
@@ -214,7 +217,7 @@ class LSLabelFormatter:
             task['annotations'] = [annotation]
             json_output.append(task)
 
-            # break
+            break
 
         # Write json to file
         self.write_json(json_output_path, json_output)
