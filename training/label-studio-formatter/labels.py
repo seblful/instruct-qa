@@ -22,6 +22,12 @@ class Label(ABC):
     def tuple_points(self):
         pass
 
+    @abstractmethod
+    def convert_to_relative(self,
+                            image_width,
+                            image_height):
+        pass
+
 
 class RectangleLabel(Label):
     def __init__(self,
@@ -51,6 +57,16 @@ class RectangleLabel(Label):
 
         return self.__tuple_points
 
+    def convert_to_relative(self,
+                            image_width,
+                            image_height):
+        x = self.x * image_width / 100
+        y = self.y * image_height / 100
+        width = self.width * image_width / 100
+        height = self.height * image_height / 100
+
+        return x, y, width, height
+
 
 class PolygonLabel:
     def __init__(self,
@@ -71,6 +87,13 @@ class PolygonLabel:
             self.__tuple_points = [tuple(points) for points in self.points]
 
         return self.__tuple_points
+
+    def convert_to_relative(self,
+                            image_width,
+                            image_height):
+        points = [(x * image_width, y * image_height) for x, y in self.points]
+
+        return points
 
 
 class BrushLabel:
@@ -98,25 +121,19 @@ class LSLabelFormatter:
 
         return None
 
-    def get_image_size(self, result):
-        image_width = result[0]['original_width']
-        image_height = result[0]['original_height']
-
-        return image_width, image_height
-
-    def transform_or_bbox_to_polygon(self, rect_label):
+    def transform_or_bbox_to_polygon(self,
+                                     rect_label,
+                                     image_width,
+                                     image_height):
         # Get points
-        x, y, w, h, rotation, label = rect_label.tuple_points
+        x, y, w, h = rect_label.convert_to_relative(image_width,
+                                                    image_height)
+        rotation, label = rect_label.rotation, rect_label.label
 
-        # Calculate the coordinates of the four corners of the rectangle
-        # Calculate angle and corners
+        # Calculate angle
         angle = np.radians(rotation)
 
-        # corners = np.array([[-w/2, h/2],
-        #                     [w/2, h/2],
-        #                     [w/2, -h/2],
-        #                     [-w/2, -h/2]])
-
+        # Calculate the coordinates of the four corners of the rectangle
         corners = np.array([[-w/2, -h/2],
                             [w/2, -h/2],
                             [w/2, h/2],
@@ -130,36 +147,15 @@ class LSLabelFormatter:
         center = np.array([x + w/2, y + h/2])
         rotated_corners = np.dot(corners, rotation_matrix) + center
 
+        # Format corners to absolute points
+        rotated_corners = rotated_corners / \
+            np.array([image_width, image_height])
+
         # Create PolygonLabel object
         polygon = PolygonLabel(points=rotated_corners.tolist(),
                                label=label)
 
         return polygon
-
-    import math
-
-    # def obb_to_polygon(x, y, w, h, rotation):
-    #     # Convert degrees to radians for rotation
-    #     angle_rad = math.radians(rotation)
-
-    #     # Calculate the half-diagonal
-    #     half_diagonal = math.sqrt(w**2 + h**2) / 2
-
-    #     # Calculate the angle to the corner
-    #     theta = math.atan2(h, w)
-
-    #     # Calculate the offset for each corner
-    #     offset_dx = half_diagonal * math.cos(angle_rad + theta)
-    #     offset_dy = half_diagonal * math.sin(angle_rad + theta)
-
-    #     # Calculate the coordinates for each corner
-    #     corner_1 = (x - offset_dx, y - offset_dy)
-    #     corner_2 = (x + offset_dy, y - offset_dx)
-    #     corner_3 = (x + offset_dx, y + offset_dy)
-    #     corner_4 = (x - offset_dy, y + offset_dx)
-
-    #     # Return the polygon as a list of points
-    #     return [corner_1, corner_2, corner_3, corner_4]
 
     def fill_value(self,
                    value,
@@ -193,20 +189,37 @@ class LSLabelFormatter:
 
     def visualize_polygons(self,
                            image_path,
-                           polygon):
+                           polygons,
+                           rect_labels):
         # Create an image with white background
         image = Image.open(image_path)
-        width, height = image.size
+        image_width, image_height = image.size
 
         # Initialize the drawing context with the image as background
         draw = ImageDraw.Draw(image, 'RGBA')
 
-        # Format points to relative coordinates
-        points = [(x * width / 100, y * height / 100)
-                  for x, y in polygon.points]
+        # Draw ellipse
+        for r_label in rect_labels:
+            # Get points
+            x, y, w, h = r_label.convert_to_relative(image_width, image_height)
 
-        # Draw the polygon
-        draw.polygon(points, fill=(255, 0, 0, 125))
+            # Find center of the polygon
+            cx, cy = x + w/2, y + h/2
+
+            # Define ellipse coordinates
+            ellipse_width, ellipse_height = 50, 50
+            left = cx - ellipse_width // 2
+            top = cy - ellipse_height // 2
+            right = cx + ellipse_width // 2
+            bottom = cy + ellipse_height // 2
+
+            draw.ellipse([left, top, right, bottom], fill='red')
+
+        # Draw polygon
+        for polygon in polygons:
+            points = polygon.convert_to_relative(image_width, image_height)
+            # Draw the polygon
+            draw.polygon(points, fill=(0, 0, 255, 125))
 
         # Display the image
         image.show()
@@ -230,11 +243,15 @@ class LSLabelFormatter:
             # Create blank list to store result
             new_result = []
 
+            polygons_to_vis = []
+            rect_label_to_vis = []
+
             # Process if result is not blank
             if result:
                 # Iterating through results
                 for res in result:
                     # Get value from result
+                    image_width, image_height = res['original_width'], res['original_height']
                     value = res['value']
                     # Create RectangleLabel instance
                     rect_label = RectangleLabel(x=value['x'],
@@ -245,7 +262,12 @@ class LSLabelFormatter:
                                                 label=value['rectanglelabels'][0])
 
                     # Transform oriented bbox to polygon and append it to polygons
-                    polygon = self.transform_or_bbox_to_polygon(rect_label)
+                    polygon = self.transform_or_bbox_to_polygon(rect_label,
+                                                                image_width,
+                                                                image_height)
+
+                    polygons_to_vis.append(polygon)
+                    rect_label_to_vis.append(rect_label)
 
                     # Fill value and result
                     value = self.fill_value(value, polygon)
@@ -267,7 +289,20 @@ class LSLabelFormatter:
 
             if task["file_upload"] == "b9fe78e4-16_12_730_p_0.jpg":
                 self.visualize_polygons(image_path="outputs/16_12_730_p_0.jpg",
-                                        polygon=polygon)
+                                        polygons=polygons_to_vis,
+                                        rect_labels=rect_label_to_vis)
+
+            elif task["file_upload"] == "316e0c7c-20_10_3069_p_0.jpg":
+                self.visualize_polygons(image_path="outputs/20_10_3069_p_0.jpg",
+                                        polygons=polygons_to_vis,
+                                        rect_labels=rect_label_to_vis)
+
+            elif task["file_upload"] == "45ee26df-10529_16_21_s_0.jpg":
+                self.visualize_polygons(image_path="outputs/10529_16_21_s_0.jpg",
+                                        polygons=polygons_to_vis,
+                                        rect_labels=rect_label_to_vis)
+
+                break
 
         # Write json to file
         self.write_json(json_output_path, json_output)
