@@ -111,18 +111,18 @@ class LSLabelFormatter:
 
         # Calculate angle and corners
         angle = np.radians(rotation)
-        corners = np.array([[-w/2, -h/2],
-                            [w/2, -h/2],
+        corners = np.array([[-w/2, h/2],
                             [w/2, h/2],
-                            [-w/2, h/2]])
+                            [w/2, -h/2],
+                            [-w/2, -h/2]])
 
         # Rotation matrix
-        rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
-                                    [np.sin(angle), np.cos(angle)]])
+        rotation_matrix = np.array([[np.cos(angle), np.sin(angle)],
+                                    [-np.sin(angle), np.cos(angle)]])
 
         # Rotate the corners around the center of the rectangle
         center = np.array([x + w/2, y + h/2])
-        rotated_corners = np.dot(corners, rotation_matrix.T) + center
+        rotated_corners = np.dot(corners, rotation_matrix) + center
 
         # Create PolygonLabel object
         polygon = PolygonLabel(points=rotated_corners.tolist(),
@@ -154,7 +154,7 @@ class LSLabelFormatter:
         result = copy.deepcopy(result)
 
         # Fill by new values
-        result['id'] = result['id'] + '-N'
+        result['id'] = result['id'] + "_N"
         result['value'] = value
         result['type'] = 'polygonlabels'
 
@@ -204,15 +204,17 @@ class LSLabelFormatter:
                     new_result.append(res)
 
             else:
-                # Clear and write empty
+                # Paste empty result
                 pass
 
             # Edit annotation and task and append it to json output
             annotation = copy.deepcopy(annotation)
             task = copy.deepcopy(task)
             annotation['result'] = new_result
-            task['annotations'] = annotation
+            task['annotations'] = [annotation]
             json_output.append(task)
+
+            # break
 
         # Write json to file
         self.write_json(json_output_path, json_output)
