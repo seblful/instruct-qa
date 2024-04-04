@@ -91,7 +91,8 @@ class PolygonLabel:
     def convert_to_relative(self,
                             image_width,
                             image_height):
-        points = [(x * image_width, y * image_height) for x, y in self.points]
+        points = [(x * image_width / 100, y * image_height / 100)
+                  for x, y in self.points]
 
         return points
 
@@ -130,8 +131,9 @@ class LSLabelFormatter:
                                                     image_height)
         rotation, label = rect_label.rotation, rect_label.label
 
-        # Calculate angle
+        # Calculate angle and center
         angle = np.radians(rotation)
+        center = np.array([x + w/2, y + h/2])
 
         # Calculate the coordinates of the four corners of the rectangle
         corners = np.array([[-w/2, -h/2],
@@ -144,12 +146,11 @@ class LSLabelFormatter:
                                     [-np.sin(angle), np.cos(angle)]])
 
         # Rotate the corners around the center of the rectangle
-        center = np.array([x + w/2, y + h/2])
         rotated_corners = np.dot(corners, rotation_matrix) + center
 
         # Format corners to absolute points
         rotated_corners = rotated_corners / \
-            np.array([image_width, image_height])
+            np.array([image_width, image_height]) * 100
 
         # Create PolygonLabel object
         polygon = PolygonLabel(points=rotated_corners.tolist(),
@@ -158,14 +159,9 @@ class LSLabelFormatter:
         return polygon
 
     def fill_value(self,
-                   value,
                    polygon):
 
-        # Make a copy of value
-        value = copy.deepcopy(value)
-
-        # Clear value
-        value.clear()
+        value = dict()
 
         # Fill by new values
         value['points'] = polygon.points
@@ -243,8 +239,9 @@ class LSLabelFormatter:
             # Create blank list to store result
             new_result = []
 
-            polygons_to_vis = []
-            rect_label_to_vis = []
+            # Create list to store polygons
+            polygons = []
+            rect_labels = []
 
             # Process if result is not blank
             if result:
@@ -266,11 +263,11 @@ class LSLabelFormatter:
                                                                 image_width,
                                                                 image_height)
 
-                    polygons_to_vis.append(polygon)
-                    rect_label_to_vis.append(rect_label)
+                    polygons.append(polygon)
+                    rect_labels.append(rect_label)
 
                     # Fill value and result
-                    value = self.fill_value(value, polygon)
+                    value = self.fill_value(polygon)
                     res = self.fill_result(res, value)
 
                     # Append res to new result
@@ -289,18 +286,18 @@ class LSLabelFormatter:
 
             if task["file_upload"] == "b9fe78e4-16_12_730_p_0.jpg":
                 self.visualize_polygons(image_path="outputs/16_12_730_p_0.jpg",
-                                        polygons=polygons_to_vis,
-                                        rect_labels=rect_label_to_vis)
+                                        polygons=polygons,
+                                        rect_labels=rect_labels)
 
             elif task["file_upload"] == "316e0c7c-20_10_3069_p_0.jpg":
                 self.visualize_polygons(image_path="outputs/20_10_3069_p_0.jpg",
-                                        polygons=polygons_to_vis,
-                                        rect_labels=rect_label_to_vis)
+                                        polygons=polygons,
+                                        rect_labels=rect_labels)
 
             elif task["file_upload"] == "45ee26df-10529_16_21_s_0.jpg":
                 self.visualize_polygons(image_path="outputs/10529_16_21_s_0.jpg",
-                                        polygons=polygons_to_vis,
-                                        rect_labels=rect_label_to_vis)
+                                        polygons=polygons,
+                                        rect_labels=rect_labels)
 
                 break
 
