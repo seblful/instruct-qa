@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import sys
 import os
 import json
 import copy
@@ -151,6 +152,14 @@ class LSLabelFormatter:
         rotated_corners = rotated_corners / \
             np.array([image_width, image_height]) * 100
 
+        d_rotation = min(rotation % 360, 360 - (rotation % 360))
+        bias_coef = np.array([0.1, -0.13]) * d_rotation
+
+        if 1 < rotation % 360 < 180:
+            rotated_corners -= bias_coef
+        elif 359 > rotation % 360 > 180:
+            rotated_corners += bias_coef
+
         # Create PolygonLabel object
         polygon = PolygonLabel(points=rotated_corners.tolist(),
                                label=label)
@@ -185,10 +194,12 @@ class LSLabelFormatter:
     def visualize_polygons(self,
                            image_path,
                            polygons,
-                           rect_labels):
+                           rect_labels,
+                           image_width,
+                           image_height):
         # Create an image with white background
         image = Image.open(image_path)
-        image_width, image_height = image.size
+        # image_width, image_height = image.size
 
         # Initialize the drawing context with the image as background
         draw = ImageDraw.Draw(image, 'RGBA')
@@ -286,17 +297,23 @@ class LSLabelFormatter:
             if task["file_upload"] == "b9fe78e4-16_12_730_p_0.jpg":
                 self.visualize_polygons(image_path="outputs/16_12_730_p_0.jpg",
                                         polygons=polygons,
-                                        rect_labels=rect_labels)
+                                        rect_labels=rect_labels,
+                                        image_width=image_width,
+                                        image_height=image_height)
 
             elif task["file_upload"] == "316e0c7c-20_10_3069_p_0.jpg":
                 self.visualize_polygons(image_path="outputs/20_10_3069_p_0.jpg",
                                         polygons=polygons,
-                                        rect_labels=rect_labels)
+                                        rect_labels=rect_labels,
+                                        image_width=image_width,
+                                        image_height=image_height)
 
             elif task["file_upload"] == "45ee26df-10529_16_21_s_0.jpg":
                 self.visualize_polygons(image_path="outputs/10529_16_21_s_0.jpg",
                                         polygons=polygons,
-                                        rect_labels=rect_labels)
+                                        rect_labels=rect_labels,
+                                        image_width=image_width,
+                                        image_height=image_height)
 
                 # break
 
