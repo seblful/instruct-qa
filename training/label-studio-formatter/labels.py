@@ -1,11 +1,10 @@
+from abc import ABC, abstractmethod
 import os
 import json
 import copy
 from PIL import Image, ImageDraw
 import math
 import numpy as np
-
-from abc import ABC, abstractmethod
 
 
 class Label(ABC):
@@ -299,7 +298,7 @@ class LSLabelFormatter:
                                         polygons=polygons,
                                         rect_labels=rect_labels)
 
-                break
+                # break
 
         # Write json to file
         self.write_json(json_output_path, json_output)
