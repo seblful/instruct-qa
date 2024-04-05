@@ -104,8 +104,8 @@ class BrushLabel:
 class LSLabelFormatter:
     def __init__(self):
 
-        self.labels_translator = {"table": "table",
-                                  "image": "figure",
+        self.labels_translator = {"table": "Table",
+                                  "image": "Picture",
                                   "trash": "stamp"}
 
     def read_json(self, json_input_path):
