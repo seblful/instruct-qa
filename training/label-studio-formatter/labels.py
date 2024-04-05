@@ -106,7 +106,7 @@ class LSLabelFormatter:
 
         self.labels_translator = {"table": "Table",
                                   "image": "Picture",
-                                  "trash": "stamp"}
+                                  "trash": "Stamp"}
 
     def read_json(self, json_input_path):
 
