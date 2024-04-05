@@ -104,8 +104,9 @@ class BrushLabel:
 class LSLabelFormatter:
     def __init__(self):
 
-        # json_input_dict = self.read_json(json_input_path)
-        pass
+        self.labels_translator = {"table": "table",
+                                  "image": "figure",
+                                  "trash": "stamp"}
 
     def read_json(self, json_input_path):
 
@@ -131,9 +132,13 @@ class LSLabelFormatter:
                                                     image_height)
         rotation, label = rect_label.rotation, rect_label.label
 
-        # Calculate angle and center
+        # Calculate angle and center and bias center
         angle = np.radians(rotation)
+        d_rotation = (rotation + 180) % 360 - 180
+        bias_coef = np.array(
+            [-0.048 * image_width, 0.09 * image_height]) * np.radians(d_rotation)
         center = np.array([x + w/2, y + h/2])
+        biased_center = center + bias_coef
 
         # Calculate the coordinates of the four corners of the rectangle
         corners = np.array([[-w/2, -h/2],
@@ -146,25 +151,22 @@ class LSLabelFormatter:
                                     [-np.sin(angle), np.cos(angle)]])
 
         # Rotate the corners around the center of the rectangle
-        rotated_corners = np.dot(corners, rotation_matrix) + center
+        rotated_corners = np.dot(corners, rotation_matrix) + biased_center
 
         # Format corners to absolute points
         rotated_corners = rotated_corners / \
             np.array([image_width, image_height]) * 100
 
-        d_rotation = min(rotation % 360, 360 - (rotation % 360))
-        bias_coef = np.array([0.1, -0.13]) * d_rotation
-
-        if 1 < rotation % 360 < 180:
-            rotated_corners -= bias_coef
-        elif 359 > rotation % 360 > 180:
-            rotated_corners += bias_coef
+        # # Add bias to polygon
+        # d_rotation = (rotation + 180) % 360 - 180
+        # bias_coef = np.array([-0.10, 0.16]) * d_rotation
+        # rotated_corners += bias_coef
 
         # Create PolygonLabel object
         polygon = PolygonLabel(points=rotated_corners.tolist(),
                                label=label)
 
-        return polygon
+        return polygon, biased_center
 
     def fill_value(self,
                    polygon):
@@ -174,7 +176,7 @@ class LSLabelFormatter:
         # Fill by new values
         value['points'] = polygon.points
         value['closed'] = True
-        value['polygonlabels'] = [polygon.label]
+        value['polygonlabels'] = [self.labels_translator[polygon.label]]
 
         return value
 
@@ -194,23 +196,19 @@ class LSLabelFormatter:
     def visualize_polygons(self,
                            image_path,
                            polygons,
-                           rect_labels,
+                           biased_centers,
                            image_width,
                            image_height):
         # Create an image with white background
         image = Image.open(image_path)
-        # image_width, image_height = image.size
 
         # Initialize the drawing context with the image as background
         draw = ImageDraw.Draw(image, 'RGBA')
 
         # Draw ellipse
-        for r_label in rect_labels:
-            # Get points
-            x, y, w, h = r_label.convert_to_relative(image_width, image_height)
-
+        for biased_center in biased_centers:
             # Find center of the polygon
-            cx, cy = x + w/2, y + h/2
+            cx, cy = biased_center
 
             # Define ellipse coordinates
             ellipse_width, ellipse_height = 50, 50
@@ -232,7 +230,8 @@ class LSLabelFormatter:
 
     def convert_or_bbox_to_polygon(self,
                                    json_input_path,
-                                   json_output_path):
+                                   json_output_path,
+                                   visualize=False):
 
         # Read json input
         json_input = self.read_json(json_input_path)
@@ -249,8 +248,9 @@ class LSLabelFormatter:
             # Create blank list to store result
             new_result = []
 
-            # Create list to store polygons
+            # Create list to store labels
             polygons = []
+            biased_centers = []
             rect_labels = []
 
             # Process if result is not blank
@@ -269,11 +269,12 @@ class LSLabelFormatter:
                                                 label=value['rectanglelabels'][0])
 
                     # Transform oriented bbox to polygon and append it to polygons
-                    polygon = self.transform_or_bbox_to_polygon(rect_label,
-                                                                image_width,
-                                                                image_height)
+                    polygon, biased_center = self.transform_or_bbox_to_polygon(rect_label,
+                                                                               image_width,
+                                                                               image_height)
 
                     polygons.append(polygon)
+                    biased_centers.append(biased_center)
                     rect_labels.append(rect_label)
 
                     # Fill value and result
@@ -294,28 +295,19 @@ class LSLabelFormatter:
             task['annotations'] = [annotation]
             json_output.append(task)
 
-            if task["file_upload"] == "b9fe78e4-16_12_730_p_0.jpg":
-                self.visualize_polygons(image_path="outputs/16_12_730_p_0.jpg",
-                                        polygons=polygons,
-                                        rect_labels=rect_labels,
-                                        image_width=image_width,
-                                        image_height=image_height)
+            # Visualize polygons
+            if visualize:
 
-            elif task["file_upload"] == "316e0c7c-20_10_3069_p_0.jpg":
-                self.visualize_polygons(image_path="outputs/20_10_3069_p_0.jpg",
-                                        polygons=polygons,
-                                        rect_labels=rect_labels,
-                                        image_width=image_width,
-                                        image_height=image_height)
+                visualize_dict = {"b9fe78e4-16_12_730_p_0.jpg": "outputs/16_12_730_p_0.jpg",
+                                  "316e0c7c-20_10_3069_p_0.jpg": "outputs/20_10_3069_p_0.jpg",
+                                  "45ee26df-10529_16_21_s_0.jpg": "outputs/10529_16_21_s_0.jpg"}
 
-            elif task["file_upload"] == "45ee26df-10529_16_21_s_0.jpg":
-                self.visualize_polygons(image_path="outputs/10529_16_21_s_0.jpg",
-                                        polygons=polygons,
-                                        rect_labels=rect_labels,
-                                        image_width=image_width,
-                                        image_height=image_height)
-
-                # break
+                if task["file_upload"] in visualize_dict:
+                    self.visualize_polygons(image_path=visualize_dict[task["file_upload"]],
+                                            polygons=polygons,
+                                            biased_centers=biased_centers,
+                                            image_width=image_width,
+                                            image_height=image_height)
 
         # Write json to file
         self.write_json(json_output_path, json_output)
