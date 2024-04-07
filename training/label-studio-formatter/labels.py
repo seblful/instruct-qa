@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 import sys
 import os
-import json
+
 import copy
-from PIL import Image, ImageDraw
+import json
 import math
+from PIL import Image, ImageDraw
+
 import numpy as np
+import cv2
 
 
 class Label(ABC):
@@ -138,6 +141,33 @@ class PolygonLabel:
                   for x, y in self.points]
 
         return points
+
+    def get_size(self):
+        y_max = x_max = float('-inf')
+
+        for x, y in self.points:
+            y_max = max(y, y_max)
+            x_max = max(x, x_max)
+
+        return x_max, y_max
+
+    def convert_to_brush_label(self,
+                               image_width,
+                               image_height):
+        # Converts points to relative
+        relative_points = self.convert_to_relative(image_width, image_height)
+        relative_points = np.array(relative_points, dtype=np.int32)
+
+        # Get size of brush label
+        x_max, y_max = self.get_size()
+        size = (int(x_max * image_width / 100),
+                int(y_max * image_height / 100))
+
+        # Generate mask from polygons
+        mask = np.zeros(size, dtype=np.int32)
+        mask = cv2.fillPoly(mask, [relative_points], 1)
+
+        return mask
 
 
 class BrushLabel:
@@ -278,18 +308,26 @@ class LSLabelFormatter:
                                                      width=value['width'],
                                                      height=value['height'],
                                                      rotation=value['rotation'],
-                                                     label=value['rectanglelabels'][0])
+                                                     label=value[self.labels_type_translator[label_from]][0])
 
                         # Transform oriented bbox to polygon and append it to polygons
                         label_output, biased_center = label_input.convert_to_polygon_label(image_width,
                                                                                            image_height)
 
-                        labels_input.append(label_input)
-                        labels_output.append(label_output)
                         biased_centers.append(biased_center)
 
                     elif label_from == "polygon":
-                        pass
+                        # Create PolygonLabel instance
+                        label_input = PolygonLabel(points=value['points'],
+                                                   label=value[self.labels_type_translator[label_from]][0])
+
+                        # Transform polygon to brush
+                        label_output = label_input.convert_to_brush_label(image_width,
+                                                                          image_height)
+
+                    # Append labels to lists
+                    labels_input.append(label_input)
+                    labels_output.append(label_output)
 
                     # Fill value and result
                     value = self.fill_value(label_to=label_to,
