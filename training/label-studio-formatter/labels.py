@@ -67,6 +67,49 @@ class RectangleLabel(Label):
 
         return x, y, width, height
 
+    def convert_to_polygon_label(self,
+                                 image_width,
+                                 image_height):
+        # Get points
+        x, y, w, h = self.convert_to_relative(image_width,
+                                              image_height)
+
+        # Calculate angle and center and bias center
+        angle = np.radians(self.rotation)
+        d_rotation = (self.rotation + 180) % 360 - 180
+        bias_coef = np.array(
+            [-0.048 * image_width, 0.09 * image_height]) * np.radians(d_rotation)
+        center = np.array([x + w/2, y + h/2])
+        biased_center = center + bias_coef
+
+        # Calculate the coordinates of the four corners of the rectangle
+        corners = np.array([[-w/2, -h/2],
+                            [w/2, -h/2],
+                            [w/2, h/2],
+                            [-w/2, h/2]])
+
+        # Rotation matrix
+        rotation_matrix = np.array([[np.cos(angle), np.sin(angle)],
+                                    [-np.sin(angle), np.cos(angle)]])
+
+        # Rotate the corners around the center of the rectangle
+        rotated_corners = np.dot(corners, rotation_matrix) + biased_center
+
+        # Format corners to absolute points
+        rotated_corners = rotated_corners / \
+            np.array([image_width, image_height]) * 100
+
+        # # Add bias to polygon
+        # d_rotation = (rotation + 180) % 360 - 180
+        # bias_coef = np.array([-0.10, 0.16]) * d_rotation
+        # rotated_corners += bias_coef
+
+        # Create PolygonLabel object
+        polygon = PolygonLabel(points=rotated_corners.tolist(),
+                               label=self.label)
+
+        return polygon, biased_center
+
 
 class PolygonLabel:
     def __init__(self,
@@ -103,6 +146,9 @@ class BrushLabel:
 
 class LSLabelFormatter:
     def __init__(self):
+        self.labels_type_translator = {"recctangle": "rectanglelabels",
+                                       "polygon": "polygonlabels",
+                                       "brush": "brushlabels"}
 
         self.labels_translator = {"table": "Table",
                                   "image": "Picture",
@@ -123,64 +169,26 @@ class LSLabelFormatter:
 
         return None
 
-    def transform_or_bbox_to_polygon(self,
-                                     rect_label,
-                                     image_width,
-                                     image_height):
-        # Get points
-        x, y, w, h = rect_label.convert_to_relative(image_width,
-                                                    image_height)
-        rotation, label = rect_label.rotation, rect_label.label
-
-        # Calculate angle and center and bias center
-        angle = np.radians(rotation)
-        d_rotation = (rotation + 180) % 360 - 180
-        bias_coef = np.array(
-            [-0.048 * image_width, 0.09 * image_height]) * np.radians(d_rotation)
-        center = np.array([x + w/2, y + h/2])
-        biased_center = center + bias_coef
-
-        # Calculate the coordinates of the four corners of the rectangle
-        corners = np.array([[-w/2, -h/2],
-                            [w/2, -h/2],
-                            [w/2, h/2],
-                            [-w/2, h/2]])
-
-        # Rotation matrix
-        rotation_matrix = np.array([[np.cos(angle), np.sin(angle)],
-                                    [-np.sin(angle), np.cos(angle)]])
-
-        # Rotate the corners around the center of the rectangle
-        rotated_corners = np.dot(corners, rotation_matrix) + biased_center
-
-        # Format corners to absolute points
-        rotated_corners = rotated_corners / \
-            np.array([image_width, image_height]) * 100
-
-        # # Add bias to polygon
-        # d_rotation = (rotation + 180) % 360 - 180
-        # bias_coef = np.array([-0.10, 0.16]) * d_rotation
-        # rotated_corners += bias_coef
-
-        # Create PolygonLabel object
-        polygon = PolygonLabel(points=rotated_corners.tolist(),
-                               label=label)
-
-        return polygon, biased_center
-
     def fill_value(self,
-                   polygon):
+                   label_to,
+                   label):
 
+        # Create empty dict
         value = dict()
 
         # Fill by new values
-        value['points'] = polygon.points
-        value['closed'] = True
-        value['polygonlabels'] = [self.labels_translator[polygon.label]]
+        if label_to == "polygon":
+            value['points'] = label.points
+            value['closed'] = True
+            value['polygonlabels'] = [self.labels_translator[label.label]]
+
+        elif label_to == "brush":
+            pass
 
         return value
 
     def fill_result(self,
+                    label_to,
                     result,
                     value):
         # Make a copy of result
@@ -189,7 +197,7 @@ class LSLabelFormatter:
         # Fill by new values
         result['id'] = result['id'] + "_N"
         result['value'] = value
-        result['type'] = 'polygonlabels'
+        result['type'] = self.labels_type_translator[label_to]
 
         return result
 
@@ -228,10 +236,12 @@ class LSLabelFormatter:
         # Display the image
         image.show()
 
-    def convert_or_bbox_to_polygon(self,
-                                   json_input_path,
-                                   json_output_path,
-                                   visualize=False):
+    def convert_labels(self,
+                       label_from,
+                       label_to,
+                       json_input_path,
+                       json_output_path,
+                       visualize=False):
 
         # Read json input
         json_input = self.read_json(json_input_path)
@@ -240,7 +250,7 @@ class LSLabelFormatter:
         json_output = []
 
         # Iterating through tasks
-        for i, task in enumerate(json_input):
+        for task in json_input:
             # Retrieve annotations and results
             annotation = task['annotations'][0]
             result = annotation['result']
@@ -249,9 +259,9 @@ class LSLabelFormatter:
             new_result = []
 
             # Create list to store labels
-            polygons = []
+            labels_input = []
+            labels_output = []
             biased_centers = []
-            rect_labels = []
 
             # Process if result is not blank
             if result:
@@ -260,26 +270,33 @@ class LSLabelFormatter:
                     # Get value from result
                     image_width, image_height = res['original_width'], res['original_height']
                     value = res['value']
-                    # Create RectangleLabel instance
-                    rect_label = RectangleLabel(x=value['x'],
-                                                y=value['y'],
-                                                width=value['width'],
-                                                height=value['height'],
-                                                rotation=value['rotation'],
-                                                label=value['rectanglelabels'][0])
 
-                    # Transform oriented bbox to polygon and append it to polygons
-                    polygon, biased_center = self.transform_or_bbox_to_polygon(rect_label,
-                                                                               image_width,
-                                                                               image_height)
+                    if label_from == "rectangle":
+                        # Create RectangleLabel instance
+                        label_input = RectangleLabel(x=value['x'],
+                                                     y=value['y'],
+                                                     width=value['width'],
+                                                     height=value['height'],
+                                                     rotation=value['rotation'],
+                                                     label=value['rectanglelabels'][0])
 
-                    polygons.append(polygon)
-                    biased_centers.append(biased_center)
-                    rect_labels.append(rect_label)
+                        # Transform oriented bbox to polygon and append it to polygons
+                        label_output, biased_center = label_input.convert_to_polygon_label(image_width,
+                                                                                           image_height)
+
+                        labels_input.append(label_input)
+                        labels_output.append(label_output)
+                        biased_centers.append(biased_center)
+
+                    elif label_from == "polygon":
+                        pass
 
                     # Fill value and result
-                    value = self.fill_value(polygon)
-                    res = self.fill_result(res, value)
+                    value = self.fill_value(label_to=label_to,
+                                            label=label_output)
+                    res = self.fill_result(label_to=label_to,
+                                           result=res,
+                                           value=value)
 
                     # Append res to new result
                     new_result.append(res)
@@ -304,7 +321,7 @@ class LSLabelFormatter:
 
                 if task["file_upload"] in visualize_dict:
                     self.visualize_polygons(image_path=visualize_dict[task["file_upload"]],
-                                            polygons=polygons,
+                                            polygons=labels_output,
                                             biased_centers=biased_centers,
                                             image_width=image_width,
                                             image_height=image_height)
