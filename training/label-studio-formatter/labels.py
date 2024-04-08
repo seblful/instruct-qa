@@ -151,6 +151,21 @@ class PolygonLabel:
 
         return x_max, y_max
 
+    def mask_to_rle(self, mask):
+        flattened_mask = mask.ravel(order="F")
+        diff_arr = np.diff(flattened_mask)
+        nonzero_indices = np.where(diff_arr != 0)[0] + 1
+        lengths = np.diff(np.concatenate(
+            ([0], nonzero_indices, [len(flattened_mask)])))
+
+        # note that the odd counts are always the numbers of zeros
+        if flattened_mask[0] == 1:
+            lengths = np.concatenate(([0], lengths))
+
+        rle = lengths.tolist()
+
+        return rle
+
     def convert_to_brush_label(self,
                                image_width,
                                image_height):
@@ -158,16 +173,22 @@ class PolygonLabel:
         relative_points = self.convert_to_relative(image_width, image_height)
         relative_points = np.array(relative_points, dtype=np.int32)
 
-        # Get size of brush label
-        x_max, y_max = self.get_size()
-        size = (int(x_max * image_width / 100),
-                int(y_max * image_height / 100))
+        # # Get size of brush label
+        # x_max, y_max = self.get_size()
+        # size = (int(x_max * image_width / 100),
+        #         int(y_max * image_height / 100))
 
         # Generate mask from polygons
-        mask = np.zeros(size, dtype=np.int32)
+        mask = np.zeros((image_height, image_width), dtype=np.int32)
         mask = cv2.fillPoly(mask, [relative_points], 1)
 
-        return mask
+        image = Image.fromarray(mask * 255)
+        image.show()
+
+        # Convert to rle
+        rle = self.mask_to_rle(mask)
+
+        return rle
 
 
 class BrushLabel:
