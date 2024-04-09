@@ -351,9 +351,67 @@ class BrushLabel(Label):
         return points
 
 
+class LabelsVisualizer():
+    def __init__(self,
+                 images_dir):
+        self.images_dir = images_dir
+        self.images_listdir = [image for image in os.listdir(
+            images_dir) if image.endswith(('.jpg', '.png'))]
+
+    def check_image_exists(self,
+                           image_path):
+        if not image_path in self.images_listdir:
+            print(f"Image {image_path} not in images directory.")
+            return False
+
+        return True
+
+    def visualize_polygons(self,
+                           image_path,
+                           polygons,
+                           biased_centers,
+                           image_width,
+                           image_height):
+
+        # Check if image in the folder
+        if not self.check_image_exists(image_path):
+            return
+
+        # Create full path and open image
+        full_image_path = os.path.join(self.images_dir, image_path)
+        image = Image.open(full_image_path)
+
+        # Initialize the drawing context with the image as background
+        draw = ImageDraw.Draw(image, 'RGBA')
+
+        # Draw ellipse
+        for biased_center in biased_centers:
+            # Find center of the polygon
+            cx, cy = biased_center
+
+            # Define ellipse coordinates
+            ellipse_width, ellipse_height = 50, 50
+            left = cx - ellipse_width // 2
+            top = cy - ellipse_height // 2
+            right = cx + ellipse_width // 2
+            bottom = cy + ellipse_height // 2
+
+            draw.ellipse([left, top, right, bottom], fill='red')
+
+        # Draw polygon
+        for polygon in polygons:
+            points = polygon.convert_to_relative(image_width, image_height)
+            # Draw the polygon
+            draw.polygon(points, fill=(0, 0, 255, 125))
+
+        # Display the image
+        image.show()
+
+
 class LSLabelFormatter:
-    def __init__(self):
-        self.labels_type_translator = {"recctangle": "rectanglelabels",
+    def __init__(self,
+                 images_dir=None):
+        self.labels_type_translator = {"rectangle": "rectanglelabels",
                                        "polygon": "polygonlabels",
                                        "brush": "brushlabels"}
 
@@ -364,6 +422,8 @@ class LSLabelFormatter:
         self.from_name_translator = {'rectangle': 'label',
                                      'polygon': 'label',
                                      'brush': 'tag'}
+
+        self.visualizer = LabelsVisualizer(images_dir=images_dir)
 
     def read_json(self, json_input_path):
 
@@ -415,41 +475,6 @@ class LSLabelFormatter:
         result['to_name'] = 'image'
 
         return result
-
-    def visualize_polygons(self,
-                           image_path,
-                           polygons,
-                           biased_centers,
-                           image_width,
-                           image_height):
-        # Create an image with white background
-        image = Image.open(image_path)
-
-        # Initialize the drawing context with the image as background
-        draw = ImageDraw.Draw(image, 'RGBA')
-
-        # Draw ellipse
-        for biased_center in biased_centers:
-            # Find center of the polygon
-            cx, cy = biased_center
-
-            # Define ellipse coordinates
-            ellipse_width, ellipse_height = 50, 50
-            left = cx - ellipse_width // 2
-            top = cy - ellipse_height // 2
-            right = cx + ellipse_width // 2
-            bottom = cy + ellipse_height // 2
-
-            draw.ellipse([left, top, right, bottom], fill='red')
-
-        # Draw polygon
-        for polygon in polygons:
-            points = polygon.convert_to_relative(image_width, image_height)
-            # Draw the polygon
-            draw.polygon(points, fill=(0, 0, 255, 125))
-
-        # Display the image
-        image.show()
 
     def convert_labels(self,
                        label_from,
@@ -537,17 +562,19 @@ class LSLabelFormatter:
 
             # Visualize polygons
             if visualize:
+                # Retrieve image path
+                image_path = task["file_upload"].split('-')[1]
 
-                visualize_dict = {"b9fe78e4-16_12_730_p_0.jpg": "outputs/16_12_730_p_0.jpg",
-                                  "316e0c7c-20_10_3069_p_0.jpg": "outputs/20_10_3069_p_0.jpg",
-                                  "45ee26df-10529_16_21_s_0.jpg": "outputs/10529_16_21_s_0.jpg"}
+                if label_to == "polygon":
+                    # Visualizie polygon labels
+                    self.visualizer.visualize_polygons(image_path=image_path,
+                                                       polygons=labels_output,
+                                                       biased_centers=biased_centers,
+                                                       image_width=image_width,
+                                                       image_height=image_height)
 
-                if task["file_upload"] in visualize_dict:
-                    self.visualize_polygons(image_path=visualize_dict[task["file_upload"]],
-                                            polygons=labels_output,
-                                            biased_centers=biased_centers,
-                                            image_width=image_width,
-                                            image_height=image_height)
+                elif label_to == "brush":
+                    pass
 
         # Write json to file
         self.write_json(json_output_path, json_output)
