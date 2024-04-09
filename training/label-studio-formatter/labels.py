@@ -114,7 +114,7 @@ class RectangleLabel(Label):
         return polygon, biased_center
 
 
-class PolygonLabel:
+class PolygonLabel(Label):
     def __init__(self,
                  points,
                  label):
@@ -122,7 +122,6 @@ class PolygonLabel:
         self.label = label
 
         self.__tuple_points = None
-        pass
 
     def __repr__(self):
         return f"PolygonLabel: points={self.points}, label='{self.label}'"
@@ -318,13 +317,38 @@ class PolygonLabel:
 
         # Convert to rle
         rle = self.encode_rle(array)
+        brush_label = BrushLabel(points=rle,
+                                 mask=mask,
+                                 label=self.label)
 
-        return rle
+        return brush_label
 
 
-class BrushLabel:
+class BrushLabel(Label):
+    def __init__(self,
+                 points,
+                 mask,
+                 label):
+        self.points = points
+        self.mask = mask
+        self.label = label
 
-    pass
+        self.__tuple_points = None
+
+    def __repr__(self):
+        return f"BrushLabel: points={self.points}, label='{self.label}'"
+
+    @property
+    def tuple_points(self):
+        if self.__tuple_points is None:
+            self.__tuple_points = [tuple(points) for points in self.points]
+
+        return self.__tuple_points
+
+    def convert_to_relative(self):
+        points = [x / 255 for x in self.points]
+
+        return points
 
 
 class LSLabelFormatter:
@@ -336,6 +360,10 @@ class LSLabelFormatter:
         self.labels_translator = {"table": "Table",
                                   "image": "Picture",
                                   "trash": "Stamp"}
+
+        self.from_name_translator = {'rectangle': 'label',
+                                     'polygon': 'label',
+                                     'brush': 'tag'}
 
     def read_json(self, json_input_path):
 
@@ -366,7 +394,9 @@ class LSLabelFormatter:
             value['polygonlabels'] = [self.labels_translator[label.label]]
 
         elif label_to == "brush":
-            pass
+            value['format'] = "rle"
+            value['rle'] = label.points
+            value['brushlabels'] = [label.label]
 
         return value
 
@@ -381,6 +411,8 @@ class LSLabelFormatter:
         result['id'] = result['id'] + "_N"
         result['value'] = value
         result['type'] = self.labels_type_translator[label_to]
+        result['from_name'] = self.from_name_translator[label_to]
+        result['to_name'] = 'image'
 
         return result
 
