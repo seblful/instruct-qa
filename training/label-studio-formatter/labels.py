@@ -141,15 +141,6 @@ class PolygonLabel(Label):
 
         return points
 
-    def get_size(self):
-        y_max = x_max = float('-inf')
-
-        for x, y in self.points:
-            y_max = max(y, y_max)
-            x_max = max(x, x_max)
-
-        return x_max, y_max
-
     def base_rle_encode(self, inarray):
         """run length encoding. Partial credit to R rle function.
         Multi datatype arrays catered for including non Numpy
@@ -304,11 +295,6 @@ class PolygonLabel(Label):
         relative_points = self.convert_to_relative(image_width, image_height)
         relative_points = np.array(relative_points, dtype=np.int32)
 
-        # # Get size of brush label
-        # x_max, y_max = self.get_size()
-        # size = (int(x_max * image_width / 100),
-        #         int(y_max * image_height / 100))
-
         # Generate mask from polygons and preprocess it
         mask = np.zeros((image_height, image_width), dtype=np.int32)
         mask = cv2.fillPoly(mask, [relative_points], 255)
@@ -406,6 +392,18 @@ class LabelsVisualizer():
 
         # Display the image
         image.show()
+
+    def visualize_brushes(self,
+                          image_path,
+                          brushes,
+                          image_width,
+                          image_height):
+        # Check if image in the folder
+        if not self.check_image_exists(image_path):
+            return
+
+        # Create full path and open image
+        full_image_path = os.path.join(self.images_dir, image_path)
 
 
 class LSLabelFormatter:
@@ -574,7 +572,10 @@ class LSLabelFormatter:
                                                        image_height=image_height)
 
                 elif label_to == "brush":
-                    pass
+                    self.visualizer.visualize_brushes(image_path=image_path,
+                                                      brushes=labels_output,
+                                                      image_width=image_width,
+                                                      image_height=image_height)
 
         # Write json to file
         self.write_json(json_output_path, json_output)
