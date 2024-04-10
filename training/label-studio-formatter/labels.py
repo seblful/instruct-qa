@@ -396,14 +396,36 @@ class LabelsVisualizer():
     def visualize_brushes(self,
                           image_path,
                           brushes,
-                          image_width,
-                          image_height):
+                          color=[255, 0, 0]):
+
         # Check if image in the folder
         if not self.check_image_exists(image_path):
             return
 
         # Create full path and open image
         full_image_path = os.path.join(self.images_dir, image_path)
+        image = Image.open(full_image_path)
+        image = np.array(image)
+
+        # Create copy of image
+        masked_image = image.copy()
+
+        # Iterating through brushes and draw mask
+        for brush in brushes:
+            mask = brush.mask
+
+            # Apply the mask to the image
+            masked_image = np.where(np.repeat(mask[:, :, np.newaxis], 3, axis=2),
+                                    np.array(color, dtype='uint8'),
+                                    masked_image)
+            masked_image = masked_image.astype(np.uint8)
+
+        # addWeighted
+        masked_image = cv2.addWeighted(image, 0.3, masked_image, 0.7, 0)
+
+        # Convert and show image
+        image = Image.fromarray(masked_image)
+        image.show()
 
 
 class LSLabelFormatter:
@@ -561,7 +583,8 @@ class LSLabelFormatter:
             # Visualize polygons
             if visualize:
                 # Retrieve image path
-                image_path = task["file_upload"].split('-')[1]
+                image_path = os.path.basename(
+                    task["data"]["image"]).split('-')[1]
 
                 if label_to == "polygon":
                     # Visualizie polygon labels
@@ -573,9 +596,7 @@ class LSLabelFormatter:
 
                 elif label_to == "brush":
                     self.visualizer.visualize_brushes(image_path=image_path,
-                                                      brushes=labels_output,
-                                                      image_width=image_width,
-                                                      image_height=image_height)
+                                                      brushes=labels_output)
 
         # Write json to file
         self.write_json(json_output_path, json_output)
