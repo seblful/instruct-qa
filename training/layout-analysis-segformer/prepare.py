@@ -16,7 +16,10 @@ images_dir = os.path.join(training_dir, 'ls-input-data')
 
 
 def main():
-    pass
+    dataset_creator = DatasetCreator(raw_data_dir=raw_data_dir,
+                                     images_dir=images_dir,
+                                     dataset_dir=dataset_dir,
+                                     train_split=0.8)
 
 
 if __name__ == "__main__":
