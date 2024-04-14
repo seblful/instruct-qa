@@ -172,6 +172,9 @@ class DatasetCreator():
                 # Append labels to lists
                 polygons.append(polygon)
 
+        # Sort polygons
+        polygons.sort(key=lambda x: self.label2id[x.label], reverse=True)
+
         return polygons, image_width, image_height
 
     def __convert_polygons_to_mask(self,
