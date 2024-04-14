@@ -1,4 +1,5 @@
 import os
+import shutil
 import json
 import random
 
@@ -91,7 +92,7 @@ class DatasetCreator():
     @property
     def images_labels_dict(self):
         '''
-        Dict with names of images with corresponding 
+        Dict with names of images with corresponding
         names of label
         '''
         if self.__images_labels_dict is None:
@@ -101,13 +102,13 @@ class DatasetCreator():
 
     def __create_images_labels_dict(self, shuffle=True):
         # List of all images and labels in directory
-        images = os.listdir(self.images_dir)
-        # labels = os.listdir(self.labels_dir)
+        # images = os.listdir(self.images_dir)
+        labels = os.listdir(self.labels_dir)
 
         # Create a dictionary to store the images and labels names
         images_labels = {}
-        for image in images:
-            label = image.rstrip('.jpg') + '.txt'
+        for label in labels:
+            image = os.path.splitext(label)[0] + '.jpg'
 
             images_labels[image] = label
 
@@ -233,3 +234,60 @@ class DatasetCreator():
             # Save mask as images
             self.__save_mask(mask_array=mask_array,
                              image_name=image_name)
+
+    def __transform_and_save_image(self,
+                                   image_name,
+                                   copy_to):
+        # Define image path
+        full_image_input_path = os.path.join(self.images_dir, image_name)
+        new_image_name = os.path.splitext(image_name)[0] + '.jpg'
+        full_image_output_path = os.path.join(copy_to, new_image_name)
+
+        # Convert image to jpg
+        image = Image.open(full_image_input_path)
+        image = image.convert("RGB")
+        image.save(full_image_output_path, 'JPEG')
+        image.close()
+
+    def __transform_and_save_files_from_dict(self,
+                                             image_name,
+                                             label_name,
+                                             copy_to):
+
+        self.__transform_and_save_image(image_name, copy_to)
+
+        if label_name is not None:
+            shutil.copyfile(os.path.join(self.labels_dir, label_name),
+                            os.path.join(copy_to, label_name))
+
+    def _partitionate_data(self):
+        # Dict with images and labels
+        data = self.images_labels_dict
+
+        # Create the train, validation, and test datasets
+        num_train = int(len(data) * self.train_split)
+        num_val = int(len(data) * self.val_split)
+        num_test = int(len(data) * self.test_split)
+
+        # Create dicts with images and labels names
+        train_data = {key: data[key] for key in list(data.keys())[:num_train]}
+        val_data = {key: data[key] for key in list(
+            data.keys())[num_train:num_train+num_val]}
+        test_data = {key: data[key] for key in list(
+            data.keys())[num_train+num_val:num_train+num_val+num_test]}
+
+        # Copy the images and labels to the train, validation, and test folders
+        for data_dict, folder_name in zip((train_data, val_data, test_data), (self.train_folder, self.val_folder, self.test_folder)):
+            for image_name, label_name in data_dict.items():
+                self.__transform_and_save_files_from_dict(image_name=image_name,
+                                                          label_name=label_name,
+                                                          copy_to=folder_name)
+
+    def process(self):
+        # Creating masks from polygon json
+        print("Masks from polygons are creating...")
+        self._create_mask_images()
+        # Create train, valid, test datasets
+        print("Dataset is creating...")
+        self._partitionate_data()
+        print("Train, validation, test datasets have created.")
