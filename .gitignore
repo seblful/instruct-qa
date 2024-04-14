@@ -4,6 +4,8 @@ instructions
 runs
 yolov8*.pt
 
+training/ls-input-data
+
 training/layout-analysis-yolo/data
 training/layout-analysis-segformer/data
 
