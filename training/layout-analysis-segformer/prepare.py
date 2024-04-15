@@ -1,6 +1,6 @@
 import os
 
-from preparers import DatasetCreator
+from modules.preparers import DatasetCreator
 
 # Create path vatiables
 HOME = os.getcwd()

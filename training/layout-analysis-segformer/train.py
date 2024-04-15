@@ -1,6 +1,6 @@
 import os
 
-from trainer import SegFormerDataset
+from modules.trainer import SegFormerDataset
 
 HOME = os.getcwd()
 # Data, dataset dirs
