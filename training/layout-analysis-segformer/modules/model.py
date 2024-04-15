@@ -1,11 +1,10 @@
 import math
 from typing import Optional, Tuple, Union
 
-from transformers import SegformerConfig, SegformerForSemanticSegmentation, SegformerImageProcessor, \
-    SegformerDecodeHead, SegformerModel
 import torch
 from torch import nn
 
+from transformers import SegformerConfig, SegformerForSemanticSegmentation, SegformerDecodeHead, SegformerModel
 from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
