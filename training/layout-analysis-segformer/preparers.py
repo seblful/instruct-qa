@@ -33,11 +33,16 @@ class DatasetCreator():
                  images_dir,
                  dataset_dir,
                  train_split=0.8) -> None:
-        # Data dirs
+        # Raw data dirs
         self.inputs_dir = raw_data_dir
         self.images_dir = images_dir
-        self.labels_dir = os.path.join(raw_data_dir, 'labels')
+        self.masks_dir = os.path.join(raw_data_dir, 'masks')
+
+        # Dataset dirs
         self.dataset_dir = dataset_dir
+        self.__train_dir = None
+        self.__val_dir = None
+        self.__test_dir = None
 
         # Input dirs
         self.json_polygon_path = os.path.join(
@@ -54,40 +59,50 @@ class DatasetCreator():
 
         self.__images_labels_dict = None
 
-        # Dataset foldets
-        self.__train_folder = None
-        self.__val_folder = None
-        self.__test_folder = None
-
     @property
-    def train_folder(self):
-        if self.__train_folder is None:
-            train_folder = os.path.join(self.dataset_dir, 'train')
+    def train_dir(self):
+        if self.__train_dir is None:
+            train_dir = os.path.join(self.dataset_dir, 'train')
+            images_dir = os.path.join(train_dir, 'images')
+            masks_dir = os.path.join(train_dir, 'masks')
             # Creating folder for train set
-            os.makedirs(train_folder, exist_ok=True)
-            self.__train_folder = train_folder
+            os.makedirs(train_dir, exist_ok=True)
+            os.makedirs(images_dir, exist_ok=True)
+            os.makedirs(masks_dir, exist_ok=True)
 
-        return self.__train_folder
+            self.__train_dir = train_dir
+
+        return self.__train_dir
 
     @property
-    def val_folder(self):
-        if self.__val_folder is None:
-            val_folder = os.path.join(self.dataset_dir, 'val')
+    def val_dir(self):
+        if self.__val_dir is None:
+            val_dir = os.path.join(self.dataset_dir, 'val')
+            images_dir = os.path.join(val_dir, 'images')
+            masks_dir = os.path.join(val_dir, 'masks')
             # Creating folder for val set
-            os.makedirs(val_folder, exist_ok=True)
-            self.__val_folder = val_folder
+            os.makedirs(val_dir, exist_ok=True)
+            os.makedirs(images_dir, exist_ok=True)
+            os.makedirs(masks_dir, exist_ok=True)
 
-        return self.__val_folder
+            self.__val_dir = val_dir
+
+        return self.__val_dir
 
     @property
-    def test_folder(self):
-        if self.__test_folder is None:
-            test_folder = os.path.join(self.dataset_dir, 'test')
+    def test_dir(self):
+        if self.__test_dir is None:
+            test_dir = os.path.join(self.dataset_dir, 'test')
+            images_dir = os.path.join(test_dir, 'images')
+            masks_dir = os.path.join(test_dir, 'masks')
             # Creating folder for test set
-            os.makedirs(test_folder, exist_ok=True)
-            self.__test_folder = test_folder
+            os.makedirs(test_dir, exist_ok=True)
+            os.makedirs(images_dir, exist_ok=True)
+            os.makedirs(masks_dir, exist_ok=True)
 
-        return self.__test_folder
+            self.__test_dir = test_dir
+
+        return self.__test_dir
 
     @property
     def images_labels_dict(self):
@@ -103,7 +118,7 @@ class DatasetCreator():
     def __create_images_labels_dict(self, shuffle=True):
         # List of all images and labels in directory
         # images = os.listdir(self.images_dir)
-        labels = os.listdir(self.labels_dir)
+        labels = os.listdir(self.masks_dir)
 
         # Create a dictionary to store the images and labels names
         images_labels = {}
@@ -206,7 +221,7 @@ class DatasetCreator():
                     image_name):
         # Create mask path
         mask_name = os.path.splitext(image_name)[0] + '.png'
-        mask_path = os.path.join(self.labels_dir, mask_name)
+        mask_path = os.path.join(self.masks_dir, mask_name)
 
         # Convert mask array to image and save it
         mask_image = Image.fromarray(mask_array)
@@ -220,6 +235,11 @@ class DatasetCreator():
 
         # Iterating through tasks
         for task in json_input:
+
+            # # Take only completed results
+            # if len(task['annotations'][0]['result']) <= 4:
+            #     continue
+
             # Get polygons and labels
             polygons, image_width, image_height = self.__get_polygons(task)
 
@@ -254,11 +274,15 @@ class DatasetCreator():
                                              label_name,
                                              copy_to):
 
-        self.__transform_and_save_image(image_name, copy_to)
+        # Copy images
+        images_dir = os.path.join(copy_to, 'images')
+        self.__transform_and_save_image(image_name, images_dir)
 
+        # Copy maskss
         if label_name is not None:
-            shutil.copyfile(os.path.join(self.labels_dir, label_name),
-                            os.path.join(copy_to, label_name))
+            masks_dir = os.path.join(copy_to, 'masks')
+            shutil.copyfile(os.path.join(self.masks_dir, label_name),
+                            os.path.join(masks_dir, label_name))
 
     def _partitionate_data(self):
         # Dict with images and labels
@@ -277,11 +301,15 @@ class DatasetCreator():
             data.keys())[num_train+num_val:num_train+num_val+num_test]}
 
         # Copy the images and labels to the train, validation, and test folders
-        for data_dict, folder_name in zip((train_data, val_data, test_data), (self.train_folder, self.val_folder, self.test_folder)):
+        for data_dict, folder_name in zip((train_data, val_data, test_data), (self.train_dir, self.val_dir, self.test_dir)):
             for image_name, label_name in data_dict.items():
                 self.__transform_and_save_files_from_dict(image_name=image_name,
                                                           label_name=label_name,
                                                           copy_to=folder_name)
+
+        # Copy classes.txt file
+        shutil.copyfile(self.classes_path, os.path.join(
+            self.dataset_dir, 'classes.txt'))
 
     def process(self):
         # Creating masks from polygon json
