@@ -6,6 +6,8 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 
 from datasets import load_metric
 
@@ -83,10 +85,10 @@ class SegformerFinetuner(pl.LightningModule):
                  train_dataset,
                  val_dataset,
                  test_dataset,
-                 checkpoint="vikp/surya_det2",
-                 batch_size=4,
-                 num_workers=2,
-                 metrics_interval=100):
+                 checkpoint,
+                 batch_size,
+                 num_workers,
+                 metrics_interval):
         super(SegformerFinetuner, self).__init__()
 
         # Dataloaders
@@ -106,9 +108,9 @@ class SegformerFinetuner(pl.LightningModule):
         self.metrics_interval = metrics_interval
 
         # Device and model
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model_dtype = [torch.float32,
-                            torch.float16][self.device == 'cuda']
+                            torch.float16][self.model_device == 'cuda']
         self.model_checkpoint = checkpoint
         self.__model = None
 
@@ -124,9 +126,9 @@ class SegformerFinetuner(pl.LightningModule):
             model = SegformerForRegressionMask.from_pretrained(
                 self.model_checkpoint, torch_dtype=self.model_dtype, config=config)
             # Transfer model to device
-            model = model.to(self.device)
+            model = model.to(self.model_device)
             print(
-                f"Loading detection model {self.model_checkpoint} on device {self.device} with dtype {self.model_dtype}")
+                f"Loading detection model {self.model_checkpoint} on device {self.model_device} with dtype {self.model_dtype}")
 
             self.__model = model
 
@@ -262,3 +264,48 @@ class SegformerFinetuner(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=2e-05, eps=1e-08)
+
+
+class SegformerTrainer():
+    def __init__(self,
+                 dataset_dir,
+                 checkpoint="vikp/surya_det2",
+                 batch_size=4,
+                 num_workers=2,
+                 metrics_interval=100):
+        # Datasets
+        train_dataset = SegFormerDataset(
+            set_dir=os.path.join(dataset_dir, 'train'))
+        val_dataset = SegFormerDataset(
+            set_dir=os.path.join(dataset_dir, 'val'))
+        test_dataset = SegFormerDataset(
+            set_dir=os.path.join(dataset_dir, 'test'))
+
+        # Finetuner
+        self.segformer_finetuner = SegformerFinetuner(train_dataset=train_dataset,
+                                                      val_dataset=val_dataset,
+                                                      test_dataset=test_dataset,
+                                                      checkpoint=checkpoint,
+                                                      batch_size=batch_size,
+                                                      num_workers=num_workers,
+                                                      metrics_interval=metrics_interval)
+
+        # Callbacks
+        self.early_stop_callback = EarlyStopping(monitor="val_loss",
+                                                 min_delta=0.00,
+                                                 patience=10,
+                                                 verbose=False,
+                                                 mode="min",)
+
+        self.checkpoint_callback = ModelCheckpoint(save_top_k=1,
+                                                   monitor="val_loss")
+
+        self.trainer = pl.Trainer(gpus=1,
+                                  callbacks=[self.early_stop_callback,
+                                             self.checkpoint_callback],
+                                  max_epochs=500,
+                                  val_check_interval=len(
+                                      self.segformer_finetuner.train_dataloader))
+
+    def train(self):
+        self.trainer.fit(self.segformer_finetuner)
