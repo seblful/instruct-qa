@@ -1,6 +1,6 @@
 import os
 
-from modules.trainer import SegFormerDataset
+from modules.trainer import SegformerTrainer
 
 HOME = os.getcwd()
 # Data, dataset dirs
@@ -9,7 +9,8 @@ dataset_dir = os.path.join(data_dir, 'dataset')
 
 
 def main():
-    dataset = SegFormerDataset(set_dir=os.path.join(dataset_dir, 'train'))
+    segformer_trainer = SegformerTrainer(dataset_dir=dataset_dir)
+    segformer_trainer.train()
 
 
 if __name__ == "__main__":
