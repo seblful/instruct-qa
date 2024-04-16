@@ -8,6 +8,8 @@ training/ls-input-data
 
 training/layout-analysis-yolo/data
 training/layout-analysis-segformer/data
+training/layout-analysis-segformer/lightning_logs
+training/layout-analysis-segformer/outputs
 
 training/label-studio-formatter/outputs
 
