@@ -1,22 +1,26 @@
 import os
+import time
+import json
 from PIL import Image
 
+from pytorch_lightning.utilities.types import TRAIN_DATALOADERS
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 
-from datasets import load_metric
+import evaluate
 
 from transformers import SegformerImageProcessor, SegformerConfig
 
 from modules.model import SegformerForRegressionMask
 
 
-class SegFormerDataset():
+class SegFormerDataset(Dataset):
     def __init__(self,
                  set_dir,
                  checkpoint="vikp/surya_det2"):
@@ -80,32 +84,57 @@ class SegFormerDataset():
         return encoded_inputs
 
 
+class SegmentationDataModule(pl.LightningDataModule):
+    def __init__(self, dataset_dir, batch_size, num_workers):
+        super().__init__()
+        self.dataset_dir = dataset_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+        self.train_dataset = SegFormerDataset(
+            set_dir=os.path.join(self.dataset_dir, 'train'))
+
+    def setup(self, stage=None):
+        if stage == 'fit' or stage is None:
+            self.train_dataset = SegFormerDataset(
+                set_dir=os.path.join(self.dataset_dir, 'train'))
+            self.val_dataset = SegFormerDataset(
+                set_dir=os.path.join(self.dataset_dir, 'val'))
+
+        if stage == 'test' or stage is None:
+            self.test_dataset = SegFormerDataset(
+                set_dir=os.path.join(self.dataset_dir, 'test'))
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
 class SegformerFinetuner(pl.LightningModule):
     def __init__(self,
-                 train_dataset,
-                 val_dataset,
-                 test_dataset,
                  checkpoint,
-                 batch_size,
-                 num_workers,
-                 metrics_interval):
+                 id2label):
         super(SegformerFinetuner, self).__init__()
-
-        # Dataloaders
-        self.train_dataloader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-        self.val_dataloader = DataLoader(
-            val_dataset, batch_size=batch_size, num_workers=num_workers)
-        self.test_dataloader = DataLoader(
-            test_dataset, batch_size=batch_size, num_workers=num_workers)
-
-        # id and label
-        self.id2label = train_dataset.id2label
+        self.id2label = id2label
         self.label2id = {v: k for k, v in self.id2label.items()}
+        self.num_classes = len(id2label.keys())
 
-        self.num_classes = len(self.id2label.keys())
-
-        self.metrics_interval = metrics_interval
+        # self.model = SegformerForSemanticSegmentation.from_pretrained(
+        #     "nvidia/segformer-b0-finetuned-ade-512-512",
+        #     return_dict=False,
+        #     num_labels=self.num_classes,
+        #     id2label=self.id2label,
+        #     label2id=self.label2id,
+        #     ignore_mismatched_sizes=True,
+        # )
 
         # Device and model
         self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -114,9 +143,9 @@ class SegformerFinetuner(pl.LightningModule):
         self.model_checkpoint = checkpoint
         self.__model = None
 
-        self.train_mean_iou = load_metric("mean_iou")
-        self.val_mean_iou = load_metric("mean_iou")
-        self.test_mean_iou = load_metric("mean_iou")
+        self.train_mean_iou = evaluate.load("mean_iou")
+        self.val_mean_iou = evaluate.load("mean_iou")
+        self.test_mean_iou = evaluate.load("mean_iou")
 
     @property
     def model(self):
@@ -134,178 +163,175 @@ class SegformerFinetuner(pl.LightningModule):
 
         return self.__model
 
-    def forward(self, images, masks):
-        outputs = self.model(pixel_values=images, labels=masks)
+    def forward(self, pixel_values, labels):
+        outputs = self.model(pixel_values=pixel_values, labels=labels)
         return (outputs)
+    '''
+    def transfer_batch_to_device(self, batch, device, dataloader_idx=0):
+        batch['pixel_values'] = batch['pixel_values'].to(device)
+        batch['labels'] = batch['labels'].to(device)
+        return batch
+    '''
 
-    def training_step(self, batch, batch_nb):
+    def on_train_start(self):
+        self.start_time = time.time()
 
+    def on_train_end(self):
+        total_time = time.time() - self.start_time
+        metrics = {'final_epoch': self.current_epoch,
+                   'training_time': total_time}
+        with open('segformer_hyperparameters.json', 'w') as f:
+            json.dump(metrics, f)
+
+    def training_step(self, batch, batch_idx):
         images, masks = batch['pixel_values'], batch['labels']
-
         outputs = self(images, masks)
-
         loss, logits = outputs[0], outputs[1]
-
         upsampled_logits = nn.functional.interpolate(
             logits,
             size=masks.shape[-2:],
             mode="bilinear",
             align_corners=False
         )
-
         predicted = upsampled_logits.argmax(dim=1)
-
-        self.train_mean_iou.add_batch(
+        metrics = self.train_mean_iou._compute(
             predictions=predicted.detach().cpu().numpy(),
-            references=masks.detach().cpu().numpy()
-        )
-        if batch_nb % self.metrics_interval == 0:
-
-            metrics = self.train_mean_iou.compute(
-                num_labels=self.num_classes,
-                ignore_index=255,
-                reduce_labels=False,
-            )
-
-            metrics = {
-                'loss': loss, "mean_iou": metrics["mean_iou"], "mean_accuracy": metrics["mean_accuracy"]}
-
-            for k, v in metrics.items():
-                self.log(k, v)
-
-            return (metrics)
-        else:
-            return ({'loss': loss})
-
-    def validation_step(self, batch, batch_nb):
-
-        images, masks = batch['pixel_values'], batch['labels']
-
-        outputs = self(images, masks)
-
-        loss, logits = outputs[0], outputs[1]
-
-        upsampled_logits = nn.functional.interpolate(
-            logits,
-            size=masks.shape[-2:],
-            mode="bilinear",
-            align_corners=False
-        )
-
-        predicted = upsampled_logits.argmax(dim=1)
-
-        self.val_mean_iou.add_batch(
-            predictions=predicted.detach().cpu().numpy(),
-            references=masks.detach().cpu().numpy()
-        )
-
-        return ({'val_loss': loss})
-
-    def validation_epoch_end(self, outputs):
-        metrics = self.val_mean_iou.compute(
+            references=masks.detach().cpu().numpy(),
             num_labels=self.num_classes,
-            ignore_index=255,
+            ignore_index=254,
             reduce_labels=False,
         )
+        # Extract per category metrics and convert to list if necessary (pop before defining the metrics dictionary)
+        per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
+        per_category_iou = metrics.pop("per_category_iou").tolist()
 
-        avg_val_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        val_mean_iou = metrics["mean_iou"]
-        val_mean_accuracy = metrics["mean_accuracy"]
-
-        metrics = {"val_loss": avg_val_loss, "val_mean_iou": val_mean_iou,
-                   "val_mean_accuracy": val_mean_accuracy}
+        # Re-define metrics dict to include per-category metrics directly
+        metrics = {
+            'loss': loss,
+            "mean_iou": metrics["mean_iou"],
+            "mean_accuracy": metrics["mean_accuracy"],
+            **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
+            **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
+        }
         for k, v in metrics.items():
-            self.log(k, v)
+            self.log(k, v, sync_dist=True, on_epoch=True, logger=True)
+        return (metrics)
 
-        return metrics
-
-    def test_step(self, batch, batch_nb):
-
+    def validation_step(self, batch, batch_idx):
         images, masks = batch['pixel_values'], batch['labels']
-
         outputs = self(images, masks)
-
         loss, logits = outputs[0], outputs[1]
+        upsampled_logits = nn.functional.interpolate(
+            logits,
+            size=masks[0].shape[-2:],
+            mode="bilinear",
+            align_corners=False
+        )
+        predicted = upsampled_logits.argmax(dim=1)
+        metrics = self.val_mean_iou._compute(
+            predictions=predicted.detach().cpu().numpy(),
+            references=masks.detach().cpu().numpy(),
+            num_labels=self.num_classes,
+            ignore_index=254,
+            reduce_labels=False,
+        )
+        # Extract per category metrics and convert to list if necessary (pop before defining the metrics dictionary)
+        per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
+        per_category_iou = metrics.pop("per_category_iou").tolist()
 
+        # Re-define metrics dict to include per-category metrics directly
+        metrics = {
+            'loss': loss,
+            "mean_iou": metrics["mean_iou"],
+            "mean_accuracy": metrics["mean_accuracy"],
+            **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
+            **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
+        }
+        for k, v in metrics.items():
+            self.log(k, v, sync_dist=True)
+        return (metrics)
+
+    def test_step(self, batch, batch_idx):
+        images, masks = batch['pixel_values'], batch['labels']
+        outputs = self(images, masks)
+        loss, logits = outputs[0], outputs[1]
         upsampled_logits = nn.functional.interpolate(
             logits,
             size=masks.shape[-2:],
             mode="bilinear",
             align_corners=False
         )
-
         predicted = upsampled_logits.argmax(dim=1)
-
-        self.test_mean_iou.add_batch(
+        metrics = self.test_mean_iou._compute(
             predictions=predicted.detach().cpu().numpy(),
-            references=masks.detach().cpu().numpy()
-        )
-
-        return ({'test_loss': loss})
-
-    def test_epoch_end(self, outputs):
-        metrics = self.test_mean_iou.compute(
+            references=masks.detach().cpu().numpy(),
             num_labels=self.num_classes,
-            ignore_index=255,
+            ignore_index=254,
             reduce_labels=False,
         )
+        # Extract per category metrics and convert to list if necessary (pop before defining the metrics dictionary)
+        per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
+        per_category_iou = metrics.pop("per_category_iou").tolist()
 
-        avg_test_loss = torch.stack([x["test_loss"] for x in outputs]).mean()
-        test_mean_iou = metrics["mean_iou"]
-        test_mean_accuracy = metrics["mean_accuracy"]
-
-        metrics = {"test_loss": avg_test_loss, "test_mean_iou": test_mean_iou,
-                   "test_mean_accuracy": test_mean_accuracy}
-
+        # Re-define metrics dict to include per-category metrics directly
+        metrics = {
+            'loss': loss,
+            "mean_iou": metrics["mean_iou"],
+            "mean_accuracy": metrics["mean_accuracy"],
+            **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
+            **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
+        }
         for k, v in metrics.items():
-            self.log(k, v)
-
-        return metrics
+            self.log(k, v, sync_dist=True)
+        return (metrics)
 
     def configure_optimizers(self):
-        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=2e-05, eps=1e-08)
+        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=0.001)
 
 
 class SegformerTrainer():
     def __init__(self,
                  dataset_dir,
                  checkpoint="vikp/surya_det2",
+                 num_epochs=10,
                  batch_size=4,
                  num_workers=2,
                  metrics_interval=100):
-        # Datasets
-        train_dataset = SegFormerDataset(
-            set_dir=os.path.join(dataset_dir, 'train'))
-        val_dataset = SegFormerDataset(
-            set_dir=os.path.join(dataset_dir, 'val'))
-        test_dataset = SegFormerDataset(
-            set_dir=os.path.join(dataset_dir, 'test'))
+
+        # Data module
+        self.data_module = SegmentationDataModule(dataset_dir=dataset_dir,
+                                                  batch_size=batch_size,
+                                                  num_workers=num_workers)
 
         # Finetuner
-        self.segformer_finetuner = SegformerFinetuner(train_dataset=train_dataset,
-                                                      val_dataset=val_dataset,
-                                                      test_dataset=test_dataset,
-                                                      checkpoint=checkpoint,
-                                                      batch_size=batch_size,
-                                                      num_workers=num_workers,
-                                                      metrics_interval=metrics_interval)
+        self.segformer_finetuner = SegformerFinetuner(checkpoint=checkpoint,
+                                                      id2label=self.data_module.train_dataset.id2label)
 
         # Callbacks
-        self.early_stop_callback = EarlyStopping(monitor="val_loss",
+        self.early_stop_callback = EarlyStopping(monitor="loss",
                                                  min_delta=0.00,
                                                  patience=10,
-                                                 verbose=False,
-                                                 mode="min",)
+                                                 verbose=True,
+                                                 mode="min")
 
         self.checkpoint_callback = ModelCheckpoint(save_top_k=1,
-                                                   monitor="val_loss")
+                                                   monitor="loss",
+                                                   every_n_epochs=1,  # Save the model at every epoch
+                                                   save_on_train_epoch_end=True)  # Ensure saving happens at the end of a training epoch
 
-        self.trainer = pl.Trainer(gpus=1,
+        # Loggers
+        self.logger = TensorBoardLogger(
+            "tb_logger", name="segformer_lightning_v2")
+        self.logger_csv = pl.loggers.CSVLogger(
+            "outputs", name="lightning_logs_csv")
+
+        self.trainer = pl.Trainer(logger=self.logger_csv,
+                                  strategy="auto",
+                                  accelerator='gpu',
+                                  precision="16-mixed",
                                   callbacks=[self.early_stop_callback,
                                              self.checkpoint_callback],
-                                  max_epochs=500,
-                                  val_check_interval=len(
-                                      self.segformer_finetuner.train_dataloader))
+                                  max_epochs=num_epochs)
 
     def train(self):
-        self.trainer.fit(self.segformer_finetuner)
+        self.trainer.fit(self.segformer_finetuner, self.data_module)
