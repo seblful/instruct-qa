@@ -23,7 +23,7 @@ from modules.model import SegformerForRegressionMask
 class SegFormerDataset(Dataset):
     def __init__(self,
                  set_dir,
-                 checkpoint="vikp/surya_det2"):
+                 checkpoint="vikp/surya_layout"):
         # Dirs, paths with images, masks and classes
         self.set_dir = set_dir
         self.images_dir = os.path.join(set_dir, 'images')
@@ -78,8 +78,8 @@ class SegFormerDataset(Dataset):
         encoded_inputs = self.processor(
             image, segmentation_map, return_tensors="pt")
 
-        # for k, v in encoded_inputs.items():
-        #     encoded_inputs[k].squeeze_()  # remove batch dimension
+        for k, v in encoded_inputs.items():
+            encoded_inputs[k].squeeze_()  # remove batch dimension
 
         return encoded_inputs
 
@@ -123,45 +123,41 @@ class SegformerFinetuner(pl.LightningModule):
                  checkpoint,
                  id2label):
         super(SegformerFinetuner, self).__init__()
+
+        # id and label
         self.id2label = id2label
         self.label2id = {v: k for k, v in self.id2label.items()}
-        self.num_classes = len(id2label.keys())
-
-        # self.model = SegformerForSemanticSegmentation.from_pretrained(
-        #     "nvidia/segformer-b0-finetuned-ade-512-512",
-        #     return_dict=False,
-        #     num_labels=self.num_classes,
-        #     id2label=self.id2label,
-        #     label2id=self.label2id,
-        #     ignore_mismatched_sizes=True,
-        # )
+        self.num_labels = len(id2label.keys())
 
         # Device and model
         self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model_dtype = [torch.float32,
                             torch.float16][self.model_device == 'cuda']
         self.model_checkpoint = checkpoint
-        self.__model = None
 
+        self.model = self.load_model()
+
+        # Metrics
         self.train_mean_iou = evaluate.load("mean_iou")
         self.val_mean_iou = evaluate.load("mean_iou")
         self.test_mean_iou = evaluate.load("mean_iou")
 
-    @property
-    def model(self):
-        if self.__model is None:
-            # Load config and model
-            config = SegformerConfig.from_pretrained(self.model_checkpoint)
-            model = SegformerForRegressionMask.from_pretrained(
-                self.model_checkpoint, torch_dtype=self.model_dtype, config=config)
-            # Transfer model to device
-            model = model.to(self.model_device)
-            print(
-                f"Loading detection model {self.model_checkpoint} on device {self.model_device} with dtype {self.model_dtype}")
+    def load_model(self):
+        # Config
+        config = SegformerConfig.from_pretrained(self.model_checkpoint)
+        config.id2label = self.id2label
+        config.label2id = self.label2id
+        self.num_labels = self.num_labels
 
-            self.__model = model
+        # Model
+        model = SegformerForRegressionMask.from_pretrained(self.model_checkpoint,
+                                                           config=config,
+                                                           torch_dtype=self.model_dtype,
+                                                           ignore_mismatched_sizes=True)
 
-        return self.__model
+        model = model.to(self.model_device)
+
+        return model
 
     def forward(self, pixel_values, labels):
         outputs = self.model(pixel_values=pixel_values, labels=labels)
@@ -186,7 +182,7 @@ class SegformerFinetuner(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
-        loss, logits = outputs[0], outputs[1]
+        loss, logits = outputs.loss, outputs.logits
         upsampled_logits = nn.functional.interpolate(
             logits,
             size=masks.shape[-2:],
@@ -197,7 +193,7 @@ class SegformerFinetuner(pl.LightningModule):
         metrics = self.train_mean_iou._compute(
             predictions=predicted.detach().cpu().numpy(),
             references=masks.detach().cpu().numpy(),
-            num_labels=self.num_classes,
+            num_labels=self.num_labels,
             ignore_index=254,
             reduce_labels=False,
         )
@@ -220,7 +216,8 @@ class SegformerFinetuner(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
-        loss, logits = outputs[0], outputs[1]
+        loss, logits = outputs.loss, outputs.logits
+        print(loss)
         upsampled_logits = nn.functional.interpolate(
             logits,
             size=masks[0].shape[-2:],
@@ -231,7 +228,7 @@ class SegformerFinetuner(pl.LightningModule):
         metrics = self.val_mean_iou._compute(
             predictions=predicted.detach().cpu().numpy(),
             references=masks.detach().cpu().numpy(),
-            num_labels=self.num_classes,
+            num_labels=self.num_labels,
             ignore_index=254,
             reduce_labels=False,
         )
@@ -254,7 +251,7 @@ class SegformerFinetuner(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
-        loss, logits = outputs[0], outputs[1]
+        loss, logits = outputs.loss, outputs.logits
         upsampled_logits = nn.functional.interpolate(
             logits,
             size=masks.shape[-2:],
@@ -265,7 +262,7 @@ class SegformerFinetuner(pl.LightningModule):
         metrics = self.test_mean_iou._compute(
             predictions=predicted.detach().cpu().numpy(),
             references=masks.detach().cpu().numpy(),
-            num_labels=self.num_classes,
+            num_labels=self.num_num_labels,
             ignore_index=254,
             reduce_labels=False,
         )
@@ -292,7 +289,7 @@ class SegformerFinetuner(pl.LightningModule):
 class SegformerTrainer():
     def __init__(self,
                  dataset_dir,
-                 checkpoint="vikp/surya_det2",
+                 checkpoint="vikp/surya_layout",
                  num_epochs=10,
                  batch_size=4,
                  num_workers=2,
