@@ -2,6 +2,9 @@ import os
 import time
 import json
 from PIL import Image
+import sys
+
+import numpy as np
 
 from pytorch_lightning.utilities.types import TRAIN_DATALOADERS
 import torch
@@ -68,15 +71,17 @@ class SegFormerDataset(Dataset):
         return len(self.images_listdir)
 
     def __getitem__(self, idx):
-        # Open image and mask
+        # Open image
         image = Image.open(os.path.join(
             self.images_dir, self.images_listdir[idx]))
-        segmentation_map = Image.open(
+
+        # Open mask
+        mask = Image.open(
             os.path.join(self.masks_dir, self.masks_listdir[idx]))
 
         # Randomly crop + pad both image and segmentation map to same size
         encoded_inputs = self.processor(
-            image, segmentation_map, return_tensors="pt")
+            image, mask, return_tensors="pt")
 
         for k, v in encoded_inputs.items():
             encoded_inputs[k].squeeze_()  # remove batch dimension
@@ -180,8 +185,10 @@ class SegformerFinetuner(pl.LightningModule):
             json.dump(metrics, f)
 
     def training_step(self, batch, batch_idx):
+        # print("train batch", batch, batch_idx)
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
+        # print("train outputs", outputs)
         loss, logits = outputs.loss, outputs.logits
         upsampled_logits = nn.functional.interpolate(
             logits,
@@ -214,10 +221,11 @@ class SegformerFinetuner(pl.LightningModule):
         return (metrics)
 
     def validation_step(self, batch, batch_idx):
+        # print("val batch", batch, batch_idx)
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
+        # print("val outputs", outputs)
         loss, logits = outputs.loss, outputs.logits
-        print(loss)
         upsampled_logits = nn.functional.interpolate(
             logits,
             size=masks[0].shape[-2:],
