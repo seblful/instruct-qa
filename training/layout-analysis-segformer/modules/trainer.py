@@ -86,6 +86,8 @@ class SegFormerDataset(Dataset):
         for k, v in encoded_inputs.items():
             encoded_inputs[k].squeeze_()  # remove batch dimension
 
+        # print(np.unique(np.array(encoded_inputs['labels']).flatten()))
+
         return encoded_inputs
 
 
@@ -216,8 +218,8 @@ class SegformerFinetuner(pl.LightningModule):
             **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
             **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
         }
-        for k, v in metrics.items():
-            self.log(k, v, sync_dist=True, on_epoch=True, logger=True)
+        # for k, v in metrics.items():
+        #     self.log(k, v, sync_dist=True, on_epoch=True, logger=True)
         return (metrics)
 
     def validation_step(self, batch, batch_idx):
@@ -252,8 +254,8 @@ class SegformerFinetuner(pl.LightningModule):
             **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
             **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
         }
-        for k, v in metrics.items():
-            self.log(k, v, sync_dist=True)
+        # for k, v in metrics.items():
+        #     self.log(k, v, sync_dist=True)
         return (metrics)
 
     def test_step(self, batch, batch_idx):
