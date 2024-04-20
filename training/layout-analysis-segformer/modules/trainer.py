@@ -34,7 +34,8 @@ class SegFormerDataset(Dataset):
         self.classes_path = os.path.join(set_dir, os.pardir, 'classes.txt')
 
         # Feauture extractor
-        self.processor = SegformerImageProcessor.from_pretrained(checkpoint)
+        self.processor = SegformerImageProcessor.from_pretrained(
+            checkpoint, do_reduce_labels=False)
 
         # Create list if images and labels names
         self.images_listdir = [image for image in os.listdir(
@@ -85,8 +86,6 @@ class SegFormerDataset(Dataset):
 
         for k, v in encoded_inputs.items():
             encoded_inputs[k].squeeze_()  # remove batch dimension
-
-        # print(np.unique(np.array(encoded_inputs['labels']).flatten()))
 
         return encoded_inputs
 
@@ -139,7 +138,7 @@ class SegformerFinetuner(pl.LightningModule):
         # Device and model
         self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model_dtype = [torch.float32,
-                            torch.float16][self.model_device == 'cuda']
+                            torch.float32][self.model_device == 'cuda']
         self.model_checkpoint = checkpoint
 
         self.model = self.load_model()
@@ -187,10 +186,8 @@ class SegformerFinetuner(pl.LightningModule):
             json.dump(metrics, f)
 
     def training_step(self, batch, batch_idx):
-        # print("train batch", batch, batch_idx)
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
-        # print("train outputs", outputs)
         loss, logits = outputs.loss, outputs.logits
         upsampled_logits = nn.functional.interpolate(
             logits,
@@ -218,15 +215,13 @@ class SegformerFinetuner(pl.LightningModule):
             **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
             **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
         }
-        # for k, v in metrics.items():
-        #     self.log(k, v, sync_dist=True, on_epoch=True, logger=True)
+        for k, v in metrics.items():
+            self.log(k, v, sync_dist=True, on_epoch=True, logger=True)
         return (metrics)
 
     def validation_step(self, batch, batch_idx):
-        # print("val batch", batch, batch_idx)
         images, masks = batch['pixel_values'], batch['labels']
         outputs = self(images, masks)
-        # print("val outputs", outputs)
         loss, logits = outputs.loss, outputs.logits
         upsampled_logits = nn.functional.interpolate(
             logits,
@@ -254,8 +249,8 @@ class SegformerFinetuner(pl.LightningModule):
             **{f"accuracy_{self.id2label[i]}": v for i, v in enumerate(per_category_accuracy)},
             **{f"iou_{self.id2label[i]}": v for i, v in enumerate(per_category_iou)}
         }
-        # for k, v in metrics.items():
-        #     self.log(k, v, sync_dist=True)
+        for k, v in metrics.items():
+            self.log(k, v, sync_dist=True)
         return (metrics)
 
     def test_step(self, batch, batch_idx):
@@ -335,7 +330,7 @@ class SegformerTrainer():
         self.trainer = pl.Trainer(logger=self.logger_csv,
                                   strategy="auto",
                                   accelerator='gpu',
-                                  precision="16-mixed",
+                                  # precision="16-mixed",
                                   callbacks=[self.early_stop_callback,
                                              self.checkpoint_callback],
                                   max_epochs=num_epochs)
