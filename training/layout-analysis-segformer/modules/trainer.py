@@ -112,16 +112,23 @@ class SegmentationDataModule(pl.LightningDataModule):
                 set_dir=os.path.join(self.dataset_dir, 'test'))
 
     def train_dataloader(self):
-        return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+        return DataLoader(self.train_dataset,
+                          batch_size=self.batch_size,
+                          shuffle=True,
+                          num_workers=self.num_workers,
+                          persistent_workers=True)
 
     def val_dataloader(self):
-        return DataLoader(
-            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(self.val_dataset,
+                          batch_size=self.batch_size,
+                          num_workers=self.num_workers,
+                          persistent_workers=True)
 
     def test_dataloader(self):
-        return DataLoader(
-            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(self.test_dataset,
+                          batch_size=self.batch_size,
+                          num_workers=self.num_workers,
+                          persistent_workers=True)
 
 
 class SegformerFinetuner(pl.LightningModule):
@@ -137,8 +144,8 @@ class SegformerFinetuner(pl.LightningModule):
 
         # Device and model
         self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.model_dtype = [torch.float32,
-                            torch.float32][self.model_device == 'cuda']
+        self.model_dtype = torch.float16 if self.model_device == 'cuda' else torch.float32
+
         self.model_checkpoint = checkpoint
 
         self.model = self.load_model()
@@ -151,14 +158,15 @@ class SegformerFinetuner(pl.LightningModule):
     def load_model(self):
         # Config
         config = SegformerConfig.from_pretrained(self.model_checkpoint)
+
         config.id2label = self.id2label
         config.label2id = self.label2id
-        self.num_labels = self.num_labels
+        config.torch_dtype = self.model_dtype
+        config.num_labels = self.num_labels
 
         # Model
         model = SegformerForRegressionMask.from_pretrained(self.model_checkpoint,
                                                            config=config,
-                                                           torch_dtype=self.model_dtype,
                                                            ignore_mismatched_sizes=True)
 
         model = model.to(self.model_device)
@@ -327,10 +335,13 @@ class SegformerTrainer():
         self.logger_csv = pl.loggers.CSVLogger(
             "outputs", name="lightning_logs_csv")
 
+        # Set precision
+        torch.set_float32_matmul_precision("medium")
+
         self.trainer = pl.Trainer(logger=self.logger_csv,
                                   strategy="auto",
                                   accelerator='gpu',
-                                  # precision="16-mixed",
+                                  precision="16-mixed",
                                   callbacks=[self.early_stop_callback,
                                              self.checkpoint_callback],
                                   max_epochs=num_epochs)
