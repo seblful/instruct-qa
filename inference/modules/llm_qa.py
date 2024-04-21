@@ -1,0 +1,2 @@
+class LLMQA:
+    pass
