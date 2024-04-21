@@ -142,7 +142,8 @@ class SegmentationDataModule(pl.LightningDataModule):
 
 class SegformerFinetuner(pl.LightningModule):
     def __init__(self,
-                 checkpoint,
+                 model_checkpoint,
+                 model_config_path,
                  id2label):
         super(SegformerFinetuner, self).__init__()
 
@@ -155,7 +156,8 @@ class SegformerFinetuner(pl.LightningModule):
         self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model_dtype = torch.float16 if self.model_device == 'cuda' else torch.float32
 
-        self.model_checkpoint = checkpoint
+        self.model_checkpoint = model_checkpoint
+        self.model_config_path = model_config_path if model_config_path is not None else "vikp/surya_layout"
 
         self.model = self.load_model()
 
@@ -166,7 +168,7 @@ class SegformerFinetuner(pl.LightningModule):
 
     def load_model(self):
         # Config
-        config = SegformerConfig.from_pretrained(self.model_checkpoint)
+        config = SegformerConfig.from_pretrained(self.model_config_path)
 
         config.id2label = self.id2label
         config.label2id = self.label2id
@@ -312,7 +314,8 @@ class SegformerTrainer():
     def __init__(self,
                  dataset_dir,
                  image_side=1024,
-                 checkpoint="vikp/surya_layout",
+                 model_checkpoint="vikp/surya_layout",
+                 model_config_path=None,
                  num_epochs=10,
                  batch_size=4,
                  num_workers=2):
@@ -324,7 +327,8 @@ class SegformerTrainer():
                                                   num_workers=num_workers)
 
         # Finetuner
-        self.segformer_finetuner = SegformerFinetuner(checkpoint=checkpoint,
+        self.segformer_finetuner = SegformerFinetuner(model_checkpoint=model_checkpoint,
+                                                      model_config_path=model_config_path,
                                                       id2label=self.data_module.id2label)
 
         # Callbacks
