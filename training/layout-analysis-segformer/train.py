@@ -1,13 +1,17 @@
 import os
+import warnings
 
 from modules.trainer import SegformerTrainer
+
+# Ignore warnings
+warnings.filterwarnings('ignore')
 
 HOME = os.getcwd()
 # Data, dataset dirs
 data_dir = os.path.join(HOME, 'data')
 dataset_dir = os.path.join(data_dir, 'dataset')
 
-# Checkopo
+# Checkopoints
 surya_checkpoint = "vikp/surya_layout"
 last_checkpoint = "outputs/lightning_logs_csv/version_5/checkpoints/epoch=9-step=700.ckpt"
 
