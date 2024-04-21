@@ -1,7 +1,7 @@
 import os
 import argparse
 
-from trainer import Trainer
+from modules.trainer import Trainer
 
 # Create a parser
 parser = argparse.ArgumentParser(description="Get some hyperparameters.")
