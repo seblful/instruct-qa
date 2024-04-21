@@ -26,16 +26,17 @@ from modules.model import SegformerForRegressionMask
 class SegFormerDataset(Dataset):
     def __init__(self,
                  set_dir,
+                 image_side,
                  checkpoint="vikp/surya_layout"):
         # Dirs, paths with images, masks and classes
         self.set_dir = set_dir
         self.images_dir = os.path.join(set_dir, 'images')
         self.masks_dir = os.path.join(set_dir, 'masks')
-        self.classes_path = os.path.join(set_dir, os.pardir, 'classes.txt')
 
         # Feauture extractor
         self.processor = SegformerImageProcessor.from_pretrained(
             checkpoint, do_reduce_labels=False)
+        self.processor.size = {"height": image_side, "width": image_side}
 
         # Create list if images and labels names
         self.images_listdir = [image for image in os.listdir(
@@ -44,29 +45,6 @@ class SegFormerDataset(Dataset):
             self.masks_dir) if label.endswith('.png')]
         # Assert if number of images and masks is the same
         assert len(self.images_listdir) == len(self.masks_listdir)
-
-        # id and label
-        self.__id2label = None
-        self.__label2id = None
-
-    @property
-    def id2label(self):
-        if self.__id2label is None:
-            # Open classes_path and extract names from there
-            with open(self.classes_path, 'r') as classes_file:
-                classes = [i.split('\n')[0] for i in classes_file.readlines()]
-                id2label = {k: v for k, v in enumerate(classes)}
-
-            self.__id2label = id2label
-
-        return self.__id2label
-
-    @property
-    def label2id(self):
-        if self.__label2id is None:
-            self.__label2id = {v: k for k, v in self.id2label.items()}
-
-        return self.__label2id
 
     def __len__(self):
         return len(self.images_listdir)
@@ -91,25 +69,56 @@ class SegFormerDataset(Dataset):
 
 
 class SegmentationDataModule(pl.LightningDataModule):
-    def __init__(self, dataset_dir, batch_size, num_workers):
+    def __init__(self,
+                 dataset_dir,
+                 image_side,
+                 batch_size,
+                 num_workers):
         super().__init__()
         self.dataset_dir = dataset_dir
+        self.classes_path = os.path.join(dataset_dir, 'classes.txt')
+
+        self.image_side = image_side
+
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-        self.train_dataset = SegFormerDataset(
-            set_dir=os.path.join(self.dataset_dir, 'train'))
+        # id and label
+        self.__id2label = None
+        self.__label2id = None
+
+    @property
+    def id2label(self):
+        if self.__id2label is None:
+            # Open classes_path and extract names from there
+            with open(self.classes_path, 'r') as classes_file:
+                classes = [i.split('\n')[0] for i in classes_file.readlines()]
+                id2label = {k: v for k, v in enumerate(classes)}
+
+            self.__id2label = id2label
+
+        return self.__id2label
+
+    @property
+    def label2id(self):
+        if self.__label2id is None:
+            self.__label2id = {v: k for k, v in self.id2label.items()}
+
+        return self.__label2id
 
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
             self.train_dataset = SegFormerDataset(
-                set_dir=os.path.join(self.dataset_dir, 'train'))
+                set_dir=os.path.join(self.dataset_dir, 'train'),
+                image_side=self.image_side)
             self.val_dataset = SegFormerDataset(
-                set_dir=os.path.join(self.dataset_dir, 'val'))
+                set_dir=os.path.join(self.dataset_dir, 'val'),
+                image_side=self.image_side)
 
         if stage == 'test' or stage is None:
             self.test_dataset = SegFormerDataset(
-                set_dir=os.path.join(self.dataset_dir, 'test'))
+                set_dir=os.path.join(self.dataset_dir, 'test'),
+                image_side=self.image_side)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset,
@@ -302,20 +311,21 @@ class SegformerFinetuner(pl.LightningModule):
 class SegformerTrainer():
     def __init__(self,
                  dataset_dir,
+                 image_side=1024,
                  checkpoint="vikp/surya_layout",
                  num_epochs=10,
                  batch_size=4,
-                 num_workers=2,
-                 metrics_interval=100):
+                 num_workers=2):
 
         # Data module
         self.data_module = SegmentationDataModule(dataset_dir=dataset_dir,
+                                                  image_side=image_side,
                                                   batch_size=batch_size,
                                                   num_workers=num_workers)
 
         # Finetuner
         self.segformer_finetuner = SegformerFinetuner(checkpoint=checkpoint,
-                                                      id2label=self.data_module.train_dataset.id2label)
+                                                      id2label=self.data_module.id2label)
 
         # Callbacks
         self.early_stop_callback = EarlyStopping(monitor="loss",
@@ -338,6 +348,7 @@ class SegformerTrainer():
         # Set precision
         torch.set_float32_matmul_precision("medium")
 
+        # Trainer
         self.trainer = pl.Trainer(logger=self.logger_csv,
                                   strategy="auto",
                                   accelerator='gpu',
