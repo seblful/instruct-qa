@@ -9,7 +9,7 @@ import aiofiles
 
 HOME = os.getcwd()
 INSTR_DIR = os.path.join(HOME, 'instructions')
-rceth_csv = os.path.join(HOME, 'rceth.csv')
+RCETH_CSV_PATH = os.path.join(HOME, 'rceth.csv')
 
 
 async def download_pdf(session, pdf_url, save_dir):
@@ -32,7 +32,7 @@ async def download_pdf(session, pdf_url, save_dir):
 
 
 async def main():
-    df = pd.read_csv(rceth_csv, encoding='windows-1251')
+    df = pd.read_csv(RCETH_CSV_PATH, encoding='windows-1251')
     links = df['link_of_instruction'].dropna().str.split(
         ',').explode().str.strip().tolist()
 
