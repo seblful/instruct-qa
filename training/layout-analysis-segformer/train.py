@@ -8,8 +8,8 @@ warnings.filterwarnings('ignore')
 
 HOME = os.getcwd()
 # Data, dataset dirs
-data_dir = os.path.join(HOME, 'data')
-dataset_dir = os.path.join(data_dir, 'dataset')
+DATA_DIR = os.path.join(HOME, 'data')
+DATASET_DIR = os.path.join(DATA_DIR, 'dataset')
 
 # Checkopoints
 surya_checkpoint = "vikp/surya_layout"
@@ -20,7 +20,7 @@ model_config_path = 'data/config.json'
 
 def main():
     # Instantiate model
-    segformer_trainer = SegformerTrainer(dataset_dir=dataset_dir,
+    segformer_trainer = SegformerTrainer(dataset_dir=DATASET_DIR,
                                          image_side=512,
                                          model_checkpoint=surya_checkpoint,
                                          model_config_path=None,

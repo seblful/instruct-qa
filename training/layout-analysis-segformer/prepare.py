@@ -6,20 +6,20 @@ from modules.preparers import DatasetCreator
 HOME = os.getcwd()
 
 # Data, dataset dirs
-data_dir = os.path.join(HOME, 'data')
-raw_data_dir = os.path.join(data_dir, 'raw-data')
-dataset_dir = os.path.join(data_dir, 'dataset')
+DATA_DIR = os.path.join(HOME, 'data')
+RAW_DATA_DIR = os.path.join(DATA_DIR, 'raw-data')
+DATASET_DIR = os.path.join(DATA_DIR, 'dataset')
 
 # Directory with images
-training_dir = os.path.abspath(os.path.join(HOME, os.pardir))
-images_dir = os.path.join(training_dir, 'ls-input-data')
+INSTRUCT_QA_DIR = os.path.dirname(os.path.dirname(HOME))
+LS_INPUT_DIR = os.path.join(INSTRUCT_QA_DIR, 'data', 'ls-input-data')
 
 
 def main():
     # Instantiate DatasetCreator object
-    dataset_creator = DatasetCreator(raw_data_dir=raw_data_dir,
-                                     images_dir=images_dir,
-                                     dataset_dir=dataset_dir,
+    dataset_creator = DatasetCreator(raw_data_dir=RAW_DATA_DIR,
+                                     images_dir=LS_INPUT_DIR,
+                                     dataset_dir=DATASET_DIR,
                                      train_split=0.8)
 
     # Creating masks from polygons json and split data into train, val and test datasets
