@@ -19,6 +19,7 @@ model_config_path = 'data/config.json'
 
 
 def main():
+    # Instantiate model
     segformer_trainer = SegformerTrainer(dataset_dir=dataset_dir,
                                          image_side=512,
                                          model_checkpoint=surya_checkpoint,
@@ -26,7 +27,11 @@ def main():
                                          num_epochs=10,
                                          batch_size=4,
                                          num_workers=2)
+    # Train model
     segformer_trainer.train()
+
+    # Test trained model
+    segformer_trainer.test()
 
 
 if __name__ == "__main__":

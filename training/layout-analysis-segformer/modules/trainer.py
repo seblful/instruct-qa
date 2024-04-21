@@ -286,7 +286,7 @@ class SegformerFinetuner(pl.LightningModule):
         metrics = self.test_mean_iou._compute(
             predictions=predicted.detach().cpu().numpy(),
             references=masks.detach().cpu().numpy(),
-            num_labels=self.num_num_labels,
+            num_labels=self.num_labels,
             ignore_index=254,
             reduce_labels=False,
         )
@@ -363,3 +363,6 @@ class SegformerTrainer():
 
     def train(self):
         self.trainer.fit(self.segformer_finetuner, self.data_module)
+
+    def test(self):
+        self.trainer.test(self.segformer_finetuner, self.data_module)
