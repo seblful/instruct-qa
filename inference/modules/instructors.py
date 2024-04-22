@@ -1,12 +1,14 @@
 import os
-import requests
-
 import re
+import requests
+import io
+from PIL import Image
 
 from pypdf import PdfReader
+import fitz
 
 
-class Instruct:
+class Instruction:
     def __init__(self,
                  instr_dir,
                  pdf_path=None,
@@ -28,7 +30,7 @@ class Instruct:
         self.__instr_imgs = None
 
     def open_pdf(self, pdf_path):
-        instr_pdf = PdfReader(pdf_path)
+        instr_pdf = fitz.open(pdf_path)
 
         return instr_pdf
 
@@ -73,21 +75,32 @@ class Instruct:
         return self.__instr_imgs
 
     def extract_images(self):
+        # Create empty list to store images
         images = []
-        for page in self.instr_pdf.pages:
-            image = page.images[0].image
-            images.append(image)
+        # Iterate through all the pages of the PDF
+        for page_index in range(self.instr_pdf.page_count):
+            # Get the current page
+            page = self.instr_pdf[page_index]
+
+            # Get the list of images on the current page
+            image_list = page.get_images()
+
+            # Iterate through the list of images
+            for img in image_list:
+                # Extract the image
+                base_image = self.instr_pdf.extract_image(img[0])
+
+                # Get the image data and extension
+                image_data = base_image["image"]
+                image_extension = base_image["ext"]
+
+                # Create an Image object from the image data
+                image = Image.open(io.BytesIO(image_data))
+
+                if image_extension != 'jpeg':
+                    image = image.convert('RGB')
+
+                # Append image to images list
+                images.append(image)
 
         return images
-
-
-class InstructsOCR:
-    def __init__(self):
-        self.ocr_model = ''
-
-    def parse_layout(self):
-        pass
-
-    def predict(self, instruct):
-        assert isinstance(
-            instruct, Instruct), "Input for OCR prediction must be instance of Instruct class."
