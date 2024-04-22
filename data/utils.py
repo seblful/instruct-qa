@@ -21,7 +21,7 @@ def get_image(pdf_file, pdf_page):
     # Load it to PIL Image and reformat it
     image = Image.open(io.BytesIO(bytes_image))
 
-    if image_ext != 'jpg':
+    if image_ext != 'jpeg':
         image = image.convert('RGB')
 
     return image
