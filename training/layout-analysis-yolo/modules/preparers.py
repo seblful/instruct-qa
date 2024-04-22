@@ -26,9 +26,9 @@ class DatasetCreator:
         self.labels_dir = os.path.join(
             self.raw_data_dir, 'labels')  # Raw labels
 
-        self.class_mapping = {"image": 0,
+        self.class_mapping = {"trash": 0,
                               "table": 1,
-                              "trash": 2}
+                              "image": 2}
 
         self.yolo_obb_creator = YoloOBBCreator(raw_data_dir=raw_data_dir,
                                                json_min_path=self.json_min_path,
@@ -239,6 +239,10 @@ class YoloOBBCreator():
                         if class_index == -1:
                             print(
                                 f"There is no class label '{class_label}', change class mapping.")
+                            continue
+
+                        # Skip images and tables
+                        elif class_index in [1, 2]:
                             continue
 
                         # Get points in obb format
