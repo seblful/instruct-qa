@@ -8,15 +8,13 @@ import torch
 import ultralytics
 
 
-class YOLOOBBDetector:
+class YOLOStampDetector:
     def __init__(self,
                  model_path,
                  model_type='n'):
 
         # Dict to translate indexes to classes
-        self.ind2classes = {0: 'image',
-                            1: 'table',
-                            2: 'trash'}
+        self.ind2classes = {0: 'trash'}
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -55,6 +53,31 @@ class YOLOOBBDetector:
         image = Image.fromarray(image_array[..., ::-1])  # RGB PIL image
         image.show()  # show image
 
+    def crop_keys(self, image, results):
+        """
+        Process the bounding boxes produced by the table detection model into
+        cropped table images and cropped tokens.
+        """
+        # Create dict to store cropped parts of image
+        crops = {v: None for k, v in self.ind2classes.items()}
+
+        # Convert image to array
+        image_array = np.array(image)
+
+        # Extract predicted classes, confidednces, obbs
+        cls = results[0].obb.cls.detach().cpu().numpy()
+        # conf = results[0].obb.conf.detach().cpu().numpy()
+        xyxyxyxy = results[0].obb.xyxyxyxy.detach().cpu().numpy()
+
+        # Crop every part of image and add it to dict
+        for i in range(len(cls)):
+            cropped_image = self.crop_obb(image=image_array,
+                                          points=xyxyxyxy[i])
+
+            crops[self.ind2classes[cls[i]]] = cropped_image
+
+        return crops
+
     def crop_obb(self, image, points):
         # Find the minimum area rotated rectangle
         rect = cv2.minAreaRect(points)
@@ -82,27 +105,15 @@ class YOLOOBBDetector:
 
         return warped
 
-    def crop_keys(self, image, results):
-        """
-        Process the bounding boxes produced by the table detection model into
-        cropped table images and cropped tokens.
-        """
-        # Create dict to store cropped parts of image
-        crops = {v: None for k, v in self.ind2classes.items()}
 
-        # Convert image to array
-        image_array = np.array(image)
+class SegformerLayoutAnalyser:
+    pass
 
-        # Extract predicted classes, confidednces, obbs
-        cls = results[0].obb.cls.detach().cpu().numpy()
-        # conf = results[0].obb.conf.detach().cpu().numpy()
-        xyxyxyxy = results[0].obb.xyxyxyxy.detach().cpu().numpy()
 
-        # Crop every part of image and add it to dict
-        for i in range(len(cls)):
-            cropped_image = self.crop_obb(image=image_array,
-                                          points=xyxyxyxy[i])
+class TesseractOCR:
+    def __init__(self):
+        self.ocr_model = ''
 
-            crops[self.ind2classes[cls[i]]] = cropped_image
 
-        return crops
+class Processor:
+    pass
