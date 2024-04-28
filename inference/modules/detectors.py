@@ -115,14 +115,63 @@ class SegformerLayoutAnalyser:
 
 
 class ImageProcessor:
-    def clean_image(self, image):
-        pass
+    def convert_scale_abs(self,
+                          roi,
+                          alpha,
+                          beta):
+        # Apply cv2.convertScaleAbs to the ROI
+        converted_roi = cv2.convertScaleAbs(roi, alpha=alpha, beta=beta)
 
-    def clean_roi_of_image(self):
-        pass
+        return converted_roi
 
-    def process(self, image):
-        pass
+    def clean_whole_image(self,
+                          image_array,
+                          alpha=1,
+                          beta=0):
+        converted_image = self.convert_scale_abs(roi=image_array,
+                                                 alpha=alpha,
+                                                 beta=beta)
+
+        return converted_image
+
+    def clean_roi_of_image(self,
+                           image_array,
+                           bboxes,
+                           alpha=3,
+                           beta=0):
+        # Create a mask for the bounding box region
+        mask = np.zeros_like(image_array)
+
+        # Iterating through bboxes and clean_roi of bbox
+        for bbox in bboxes:
+            # Fill polygon
+            cv2.fillPoly(mask, [bbox], (255, 255, 255))
+
+            # Extract the region of interest (ROI) from the image
+            roi = cv2.bitwise_and(image_array, mask)
+
+            # Apply cv2.convertScaleAbs to the ROI
+            converted_image = self.convert_scale_abs(roi=roi,
+                                                     alpha=alpha,
+                                                     beta=beta)
+
+            # Update the original image with the processed ROI
+            converted_image = np.where(
+                mask == 255, converted_image, image_array)
+
+        return converted_image
+
+    def process(self, image_array, bboxes):
+        # Clean roi
+        image_array = self.clean_roi_of_image(image_array=image_array,
+                                              bboxes=bboxes,
+                                              alpha=4)
+
+        # Clean the whole image
+        image_array = self.clean_whole_image(image_array=image_array,
+                                             alpha=1)
+
+        return image_array
 
 
 class TesseractOCR:
@@ -162,8 +211,12 @@ class InstructionProcessor:
             # Get bboxrs
             bboxes = results[0].obb.xyxyxyxy.detach(
             ).cpu().numpy().astype(np.int32)
-            # Iterating through bbox
-            for bbox in bboxes:
-                print(bbox)
+
+            image_array = self.image_processor.process(image_array=image_array,
+                                                       bboxes=bboxes)
+
+            image = Image.fromarray(image_array)
+
+            image.show()
 
             break
