@@ -7,6 +7,8 @@ import cv2
 import torch
 import ultralytics
 
+from modules.instructors import Instruction
+
 
 class YOLOStampDetector:
     def __init__(self,
@@ -59,7 +61,7 @@ class YOLOStampDetector:
         cropped table images and cropped tokens.
         """
         # Create dict to store cropped parts of image
-        crops = {v: None for k, v in self.ind2classes.items()}
+        crops = []
 
         # Convert image to array
         image_array = np.array(image)
@@ -74,7 +76,7 @@ class YOLOStampDetector:
             cropped_image = self.crop_obb(image=image_array,
                                           points=xyxyxyxy[i])
 
-            crops[self.ind2classes[cls[i]]] = cropped_image
+            crops.append(cropped_image)
 
         return crops
 
@@ -107,7 +109,20 @@ class YOLOStampDetector:
 
 
 class SegformerLayoutAnalyser:
-    pass
+    def __init__(self,
+                 model_path):
+        self.model_path = model_path
+
+
+class ImageProcessor:
+    def clean_image(self, image):
+        pass
+
+    def clean_roi_of_image(self):
+        pass
+
+    def process(self, image):
+        pass
 
 
 class TesseractOCR:
@@ -115,5 +130,40 @@ class TesseractOCR:
         self.ocr_model = ''
 
 
-class Processor:
-    pass
+class InstructionProcessor:
+    def __init__(self,
+                 instr_dir,
+                 yolo_stamp_det_model_path,
+                 segformer_la_model_path):
+        # Paths
+        self.instr_dir = instr_dir
+
+        # Detection, LA, OCR models
+        self.yolo_stamp_det = YOLOStampDetector(model_path=yolo_stamp_det_model_path,
+                                                model_type='n')
+
+        self.segformer_la = SegformerLayoutAnalyser(
+            model_path=segformer_la_model_path)
+
+        self.tesseract_ocr = TesseractOCR()
+
+        # Image processor
+        self.image_processor = ImageProcessor()
+
+    def extract_text(self, instruction):
+        # Check if input is Instruction instance
+        assert isinstance(instruction, Instruction)
+
+        # Iterating through images in instruction
+        for image in instruction.instr_imgs:
+            image_array = np.array(image)
+            results = self.yolo_stamp_det.predict(image)
+
+            # Get bboxrs
+            bboxes = results[0].obb.xyxyxyxy.detach(
+            ).cpu().numpy().astype(np.int32)
+            # Iterating through bbox
+            for bbox in bboxes:
+                print(bbox)
+
+            break
