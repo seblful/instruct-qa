@@ -4,7 +4,6 @@ import requests
 import io
 from PIL import Image
 
-from pypdf import PdfReader
 import fitz
 
 
@@ -44,11 +43,14 @@ class Instruction:
 
         # Check if instruction was already downloaded
         if instr_name not in os.listdir(self.instr_dir):
+            print("Instruction was not downloaded before, downloading instruction...")
             res = requests.get(pdf_url)
             pdf_path = os.path.join(self.instr_dir, instr_name)
             with open(pdf_path, 'wb') as f:
                 f.write(res.content)
+            print("Opening instruction...")
         else:
+            print("Instruction was previously downloaded, opening instruction...")
             pdf_path = os.path.join(self.instr_dir, instr_name)
 
         # Set pdf path to instance
