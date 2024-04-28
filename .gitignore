@@ -18,6 +18,9 @@ data/instructions
 # Inference
 inference/models
 
+# Drafts
+draft.py
+draft.ipynb
 
 # Others
 __pycache__
