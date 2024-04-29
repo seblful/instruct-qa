@@ -176,9 +176,25 @@ class SegformerFinetuner(pl.LightningModule):
         config.num_labels = self.num_labels
 
         # Model
-        model = SegformerForRegressionMask.from_pretrained(self.model_checkpoint,
-                                                           config=config,
-                                                           ignore_mismatched_sizes=True)
+        if self.model_checkpoint.endswith(".ckpt"):
+            # Load model and checkpoint
+            model = SegformerForRegressionMask(config=config)
+            checkpoint = torch.load(self.model_checkpoint)
+
+            # Create a new state dictionary without the "model." prefix
+            new_state_dict = {}
+
+            for key, value in checkpoint['state_dict'].items():
+                new_key = key.removeprefix("model.")
+                new_state_dict[new_key] = value
+
+            # Load state dict
+            model.load_state_dict(new_state_dict)
+
+        else:
+            model = SegformerForRegressionMask.from_pretrained(self.model_checkpoint,
+                                                               config=config,
+                                                               ignore_mismatched_sizes=True)
 
         model = model.to(self.model_device)
 
