@@ -6,8 +6,10 @@ import cv2
 
 import torch
 import ultralytics
+from transformers import SegformerConfig
 
 from modules.instructors import Instruction
+from modules.segformer_model import SegformerForRegressionMask
 
 
 class YOLOStampDetector:
@@ -110,8 +112,45 @@ class YOLOStampDetector:
 
 class SegformerLayoutAnalyser:
     def __init__(self,
-                 model_path):
+                 model_path,
+                 config_path):
+        # Paths
         self.model_path = model_path
+
+        # Device
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        # Config, id2label, label2id
+        self.config = SegformerConfig.from_pretrained(config_path)
+        self.id2label = self.config.id2label
+        self.label2id = {v: k for k, v in self.id2label.items()}
+
+        # Model
+        self.__model = None
+
+    @property
+    def model(self):
+        if self.__model is None:
+            # Load model and checkpoint
+            model = SegformerForRegressionMask(config=self.config)
+            checkpoint = torch.load(self.model_path)
+
+            # Create a new state dictionary without the "model." prefix
+            new_state_dict = {}
+
+            for key, value in checkpoint['state_dict'].items():
+                new_key = key.removeprefix("model.")
+                new_state_dict[new_key] = value
+
+            # Load state dict
+            model.load_state_dict(new_state_dict)
+
+            # Move model to device
+            model = model.to(self.device)
+
+            self.__model = model
+
+        return self.__model
 
 
 class ImageProcessor:
@@ -183,7 +222,8 @@ class InstructionProcessor:
     def __init__(self,
                  instr_dir,
                  yolo_stamp_det_model_path,
-                 segformer_la_model_path):
+                 segformer_la_model_path,
+                 segformer_la_config_path):
         # Paths
         self.instr_dir = instr_dir
 
@@ -191,8 +231,8 @@ class InstructionProcessor:
         self.yolo_stamp_det = YOLOStampDetector(model_path=yolo_stamp_det_model_path,
                                                 model_type='n')
 
-        self.segformer_la = SegformerLayoutAnalyser(
-            model_path=segformer_la_model_path)
+        self.segformer_la = SegformerLayoutAnalyser(model_path=segformer_la_model_path,
+                                                    config_path=segformer_la_config_path)
 
         self.tesseract_ocr = TesseractOCR()
 
