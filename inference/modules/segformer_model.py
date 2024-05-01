@@ -123,35 +123,8 @@ class SegformerForRegressionMask(SegformerForSemanticSegmentation):
         # # Apply sigmoid to get 0-1 output
         # logits = torch.special.expit(logits)
 
-        loss = None
-        if labels is not None:
-            # upsample logits to the images' original size
-            upsampled_logits = nn.functional.interpolate(
-                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-            )
-            if self.config.num_labels > 1:
-                loss_fct = CrossEntropyLoss(
-                    ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
-            elif self.config.num_labels == 1:
-                valid_mask = ((labels >= 0) & (
-                    labels != self.config.semantic_loss_ignore_index)).float()
-                loss_fct = BCEWithLogitsLoss(reduction="none")
-                loss = loss_fct(upsampled_logits.squeeze(1), labels.float())
-                loss = (loss * valid_mask).mean()
-            else:
-                raise ValueError(
-                    f"Number of labels should be >=0: {self.config.num_labels}")
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SemanticSegmenterOutput(
-            loss=loss,
+            loss=None,
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
