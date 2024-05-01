@@ -130,6 +130,17 @@ class SegformerLayoutAnalyser:
         self.__model = None
         self.__processor = None
 
+        # Color map
+        self.color_map = {0: (0, 0, 0),
+                          1: (255, 0, 0),
+                          2: (0, 255, 0),
+                          3: (0, 0, 255),
+                          4: (255, 255, 0),
+                          5: (255, 0, 255),
+                          6: (0, 255, 255),
+                          7: (128, 128, 0),
+                          8: (128, 0, 128)}
+
     @property
     def model(self):
         if self.__model is None:
@@ -190,8 +201,29 @@ class SegformerLayoutAnalyser:
 
         return pred_mask
 
+    def visualize_mask(self,
+                       image_array,
+                       pred_mask):
+        # Convert image to 3d
+        image_array = np.dstack([image_array, image_array, image_array])
 
-class ImageProcessor:
+        # Fill mask with colors
+        color_mask = np.zeros(pred_mask.shape + (3,))
+        for i, _ in self.color_map.items():
+            color_mask[pred_mask == i] = self.color_map[i]
+        color_mask = color_mask.astype(np.uint8)
+
+        # Blend image with mask
+        blend_image = cv2.addWeighted(image_array, 0.5, color_mask, 0.5, 0)
+        blend_image = Image.fromarray(blend_image)
+
+        # Show image
+        blend_image.show()
+
+        return blend_image
+
+
+class ImageCleaner:
     def convert_scale_abs(self,
                           roi,
                           alpha,
@@ -275,7 +307,7 @@ class InstructionProcessor:
         self.tesseract_ocr = TesseractOCR()
 
         # Image processor
-        self.image_processor = ImageProcessor()
+        self.image_processor = ImageCleaner()
 
     def extract_text(self, instruction):
         # Check if input is Instruction instance
@@ -295,9 +327,9 @@ class InstructionProcessor:
                                                              bboxes=yolo_bboxes)
 
             # Layout analysis
-            segformer_results = self.segformer_la.predict(
+            pred_la_mask = self.segformer_la.predict(
                 image_array=image_array)
 
-            print(segformer_results)
-
-            break
+            # # Visualize layout analysis prediction
+            # self.segformer_la.visualize_mask(image_array=image_array,
+            #                                  pred_mask=pred_la_mask)
