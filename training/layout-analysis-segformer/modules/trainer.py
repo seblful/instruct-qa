@@ -144,13 +144,15 @@ class SegformerFinetuner(pl.LightningModule):
     def __init__(self,
                  model_checkpoint,
                  model_config_path,
-                 id2label):
+                 id2label,
+                 image_side):
         super(SegformerFinetuner, self).__init__()
 
         # id and label
         self.id2label = id2label
         self.label2id = {v: k for k, v in self.id2label.items()}
         self.num_labels = len(id2label.keys())
+        self.image_side = image_side
 
         # Device and model
         self.model_device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -174,6 +176,10 @@ class SegformerFinetuner(pl.LightningModule):
         config.label2id = self.label2id
         config.torch_dtype = self.model_dtype
         config.num_labels = self.num_labels
+        config.image_size = self.image_side
+
+        # Save config
+        config.save_pretrained('./')
 
         # Model
         if self.model_checkpoint.endswith(".ckpt"):
@@ -203,12 +209,6 @@ class SegformerFinetuner(pl.LightningModule):
     def forward(self, pixel_values, labels):
         outputs = self.model(pixel_values=pixel_values, labels=labels)
         return (outputs)
-    '''
-    def transfer_batch_to_device(self, batch, device, dataloader_idx=0):
-        batch['pixel_values'] = batch['pixel_values'].to(device)
-        batch['labels'] = batch['labels'].to(device)
-        return batch
-    '''
 
     def on_train_start(self):
         self.start_time = time.time()
@@ -345,7 +345,8 @@ class SegformerTrainer():
         # Finetuner
         self.segformer_finetuner = SegformerFinetuner(model_checkpoint=model_checkpoint,
                                                       model_config_path=model_config_path,
-                                                      id2label=self.data_module.id2label)
+                                                      id2label=self.data_module.id2label,
+                                                      image_side=image_side)
 
         # Callbacks
         self.early_stop_callback = EarlyStopping(monitor="loss",
