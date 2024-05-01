@@ -5,8 +5,9 @@ from PIL import Image
 import cv2
 
 import torch
+import torch.nn.functional as F
 import ultralytics
-from transformers import SegformerConfig
+from transformers import SegformerConfig, SegformerImageProcessor
 
 from modules.instructors import Instruction
 from modules.segformer_model import SegformerForRegressionMask
@@ -125,8 +126,9 @@ class SegformerLayoutAnalyser:
         self.id2label = self.config.id2label
         self.label2id = {v: k for k, v in self.id2label.items()}
 
-        # Model
+        # Model and processor
         self.__model = None
+        self.__processor = None
 
     @property
     def model(self):
@@ -148,9 +150,45 @@ class SegformerLayoutAnalyser:
             # Move model to device
             model = model.to(self.device)
 
+            # Turn model to evaluation
+            model.eval()
+
             self.__model = model
 
         return self.__model
+
+    @property
+    def processor(self):
+        if self.__processor is None:
+            processor = SegformerImageProcessor.from_pretrained(
+                "vikp/surya_layout", do_reduce_labels=False)
+            size = self.model.config.image_size
+            processor.size = {"height": size, "width": size}
+
+            self.__processor = processor
+
+        return self.__processor
+
+    def preprocess_image(self, image_array):
+        image_array = np.dstack([image_array, image_array, image_array])
+        image_tensor = self.processor(image_array, return_tensors="pt")
+        image_tensor = image_tensor['pixel_values'].to(self.device)
+
+        return image_tensor
+
+    def predict(self, image_array):
+        # Preprocess image
+        image_tensor = self.preprocess_image(image_array)
+
+        # Get predictions
+        with torch.no_grad():
+            results = self.model(image_tensor)
+
+        upsampled_logits = F.interpolate(
+            results.logits, size=image_array.shape, mode="bilinear", align_corners=False)
+        pred_mask = upsampled_logits.argmax(dim=1)[0].cpu().numpy()
+
+        return pred_mask
 
 
 class ImageProcessor:
@@ -246,17 +284,20 @@ class InstructionProcessor:
         # Iterating through images in instruction
         for image in instruction.instr_imgs:
             image_array = np.array(image)
-            results = self.yolo_stamp_det.predict(image)
 
-            # Get bboxrs
-            bboxes = results[0].obb.xyxyxyxy.detach(
+            # Clean image and stamp remove
+            # Predict stamps with yolo
+            yolo_results = self.yolo_stamp_det.predict(image)
+            yolo_bboxes = yolo_results[0].obb.xyxyxyxy.detach(
             ).cpu().numpy().astype(np.int32)
+            # Clean image
+            clean_image_array = self.image_processor.process(image_array=image_array,
+                                                             bboxes=yolo_bboxes)
 
-            image_array = self.image_processor.process(image_array=image_array,
-                                                       bboxes=bboxes)
+            # Layout analysis
+            segformer_results = self.segformer_la.predict(
+                image_array=image_array)
 
-            image = Image.fromarray(image_array)
-
-            image.show()
+            print(segformer_results)
 
             break
