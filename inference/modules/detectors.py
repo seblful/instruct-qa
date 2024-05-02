@@ -1,4 +1,5 @@
 import os
+import re
 
 import numpy as np
 from PIL import Image
@@ -8,6 +9,8 @@ import torch
 import torch.nn.functional as F
 import ultralytics
 from transformers import SegformerConfig, SegformerImageProcessor
+
+import pytesseract
 
 from modules.instructors import Instruction
 from modules.segformer_model import SegformerForRegressionMask
@@ -285,7 +288,52 @@ class ImageCleaner:
 
 class TesseractOCR:
     def __init__(self):
-        self.ocr_model = ''
+        self.ocr_languages = 'rus'
+
+    def ocr_image(self, image_array):
+        text = pytesseract.image_to_string(image=image_array,
+                                           lang=self.ocr_languages,
+                                           output_type='string')
+
+        return text
+
+    def clean_text(self, text):
+        re.sub(r'\n+', '\n', text)
+        text = re.sub(r'\s+', ' ', text)
+
+        return text
+
+    def osd_image(self, image_array):
+        result = pytesseract.image_to_osd(image=image_array,
+                                          lang=self.ocr_languages,
+                                          output_type='dict')
+
+        return result
+
+    def rotate_image(self, image_array):
+        # Get information about osd image
+        osd_result = self.osd_image(image_array=image_array)
+
+        # Rotate image if need
+        rotate_angle = osd_result['rotate']
+
+        if rotate_angle > 0:
+            image_array = np.rot90(image_array, k=rotate_angle // 90)
+
+        return image_array
+
+    def extract_text(self, image_array):
+
+        # Rotate image if need
+        image_array = self.rotate_image(image_array=image_array)
+
+        # Extract text
+        text = self.ocr_image(image_array=image_array)
+
+        # Clean text
+        text = self.clean_text(text=text)
+
+        return text
 
 
 class InstructionProcessor:
@@ -313,6 +361,8 @@ class InstructionProcessor:
         # Check if input is Instruction instance
         assert isinstance(instruction, Instruction)
 
+        all_text = ''
+
         # Iterating through images in instruction
         for image in instruction.instr_imgs:
             image_array = np.array(image)
@@ -326,10 +376,18 @@ class InstructionProcessor:
             clean_image_array = self.image_processor.process(image_array=image_array,
                                                              bboxes=yolo_bboxes)
 
-            # Layout analysis
-            pred_la_mask = self.segformer_la.predict(
-                image_array=image_array)
+            # # Layout analysis
+            # pred_la_mask = self.segformer_la.predict(
+            #     image_array=image_array)
 
             # # Visualize layout analysis prediction
             # self.segformer_la.visualize_mask(image_array=image_array,
             #                                  pred_mask=pred_la_mask)
+
+            # Extract text
+            text = self.tesseract_ocr.extract_text(
+                image_array=clean_image_array)
+            # Add text to all text
+            all_text += text
+
+        print(all_text)
