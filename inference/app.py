@@ -2,6 +2,7 @@ import os
 
 from modules.instructors import Instruction
 from modules.detectors import InstructionProcessor
+from modules.llm_qa import RAGAgent
 
 
 # Setup paths
@@ -15,6 +16,19 @@ MODELS_DIR = os.path.join(HOME, "models")
 YOLO_STAMP_DET_MODEL_PATH = os.path.join(MODELS_DIR, "yolo_stamp_det.pt")
 SEGFORMER_LA_MODEL_PATH = os.path.join(MODELS_DIR, "segformer_la.ckpt")
 SEGFORMER_LA_CONFIG_PATH = os.path.join(MODELS_DIR, "segformer_la_config.json")
+
+# Envs
+OPENSEARCH_LOGIN = os.getenv('OPENSEARCH_LOGIN')
+OPENSEARCH_PASSWORD = os.getenv('OPENSEARCH_PASSWORD')
+
+YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
+
+# Other
+OPENSEARCH_HOST = 'localhost'
+OPENSEARCH_PORT = 9200
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 def main():
@@ -30,7 +44,19 @@ def main():
                                            segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH)
 
     # Extract tect from instruction
-    instr_processor.extract_text(instruction=instruction)
+    text = instr_processor.extract_text(instruction=instruction)
+
+    # with open("texts.txt", 'r', encoding="windows-1251") as file:
+    #     text = file.read()
+
+    # Get answer using RAG LLM
+    question = "Какие показания к применению?"
+    rag_agent = RAGAgent(yandex_api_key=YANDEX_API_KEY,
+                         yandex_folder_id=YANDEX_FOLDER_ID)
+    answer = rag_agent.get_answer(text=text,
+                                  question=question)
+
+    print(answer)
 
 
 if __name__ == '__main__':
