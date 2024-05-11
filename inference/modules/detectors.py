@@ -390,4 +390,4 @@ class InstructionProcessor:
             # Add text to all text
             all_text += text
 
-        print(all_text)
+        return all_text
