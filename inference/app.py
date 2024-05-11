@@ -52,7 +52,11 @@ def main():
     # Get answer using RAG LLM
     question = "Какие показания к применению?"
     rag_agent = RAGAgent(yandex_api_key=YANDEX_API_KEY,
-                         yandex_folder_id=YANDEX_FOLDER_ID)
+                         yandex_folder_id=YANDEX_FOLDER_ID,
+                         db_name="faiss",
+                         opensearch_login=OPENSEARCH_LOGIN,
+                         opensearch_password=OPENSEARCH_PASSWORD)
+
     answer = rag_agent.get_answer(text=text,
                                   question=question)
 

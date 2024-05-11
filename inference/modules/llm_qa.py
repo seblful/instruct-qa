@@ -46,6 +46,9 @@ class RAGAgent:
     def __init__(self,
                  yandex_api_key,
                  yandex_folder_id,
+                 db_name='faiss',
+                 opensearch_login='admin',
+                 opensearch_password='admin',
                  chunk_size=1000,
                  chunk_overlap=200,
                  temperature=0.8,
@@ -54,6 +57,11 @@ class RAGAgent:
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap)
+
+        # DB
+        self.db_name = db_name
+        self.opensearch_login = opensearch_login
+        self.opensearch_password = opensearch_password
 
         # Embeddings and llm
         self.embeddings = YandexEmbeddings(
@@ -80,7 +88,7 @@ class RAGAgent:
         self.prompt = PromptTemplate.from_template(self.template)
 
         # Retriever
-        self.vector_searcher = VectorSearcher(db_name="faiss")
+        self.vector_searcher = VectorSearcher(db_name=self.db_name)
 
     def get_answer(self,
                    text,
@@ -90,7 +98,10 @@ class RAGAgent:
 
         # Get vectorsearch
         vectorsearch = self.vector_searcher.create_vectorsearch(documents=documents,
-                                                                embeddings=self.embeddings)
+                                                                embeddings=self.embeddings,
+                                                                opensearch_login=self.opensearch_login,
+                                                                opensearch_password=self.opensearch_password)
+
         # RetrievalQA
         qa = RetrievalQA.from_chain_type(
             self.llm,
