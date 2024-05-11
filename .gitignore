@@ -18,6 +18,8 @@ data/instructions
 
 # Inference
 inference/models
+inference/texts.txt
+inference/.env
 
 # Drafts
 draft.py
