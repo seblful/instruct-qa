@@ -15,7 +15,8 @@ RCETH_CSV_PATH = os.path.join(DATA_DIR, 'rceth.csv')
 
 # Read csv with instructions
 df = pd.read_csv(RCETH_CSV_PATH, encoding='windows-1251')
-instr_names = df.loc[:, "trade_name"].to_list()
+df["full_name"] = df["trade_name"] + " " + \
+    df["dosage_form"] + " " + df["manufacturer"]
 
 # App title
 st.set_page_config(page_title="Medical instruction question app",
@@ -23,24 +24,38 @@ st.set_page_config(page_title="Medical instruction question app",
 
 
 def search_name(name):
+    # Find name in dataframe and create subdataframe
     contain_names = df['trade_name'].str.contains(name.lower(), case=False)
-    med_df = df.loc[(contain_names) & (
-        df["dosage_form"] != "субстанция"), ["trade_name", "dosage_form", "manufacturer"]]
+    med_series = df.loc[(contain_names) & (
+        df["dosage_form"] != "субстанция"), "full_name"]
+    med_series = med_series.sort_values()
 
-    # Concatenate name, dosage_form and manufacturer
-    med_df["full_name"] = med_df["trade_name"] + " " + \
-        med_df["dosage_form"] + " " + med_df["manufacturer"]
-    names = med_df["full_name"].to_list()
+    # Sort values and convert to list
+    names = med_series.to_list()
 
     return names
+
+
+def get_inst_url(instr_urls):
+    # Split string and strip each instruction
+    instr_urls = instr_urls.split(",")
+    instr_urls = [instr.strip() for instr in instr_urls]
+
+    # Sort instruction by last letter in basename
+    instr_urls.sort(key=lambda x: os.path.splitext(
+        os.path.basename(x))[0][-1])
+
+    return instr_urls[-1]
 
 
 # Change width of sidebar
 st.markdown(
     """
 <style>
-section[data-testid="stSidebar"] {
-width: 500px !important;
+[data-testid="stSidebar"][aria-expanded="true"]{
+width: 500px;
+max-width: 768px;
+}
 </style>
 """,
     unsafe_allow_html=True
@@ -57,7 +72,14 @@ with st.sidebar:
                                placeholder="Введите название ЛП")
 
     if text_search:
-        pass
+        instr_urls = df.loc[df["full_name"] ==
+                            text_search, "link_of_instruction"].values[0]
+        if instr_urls:
+            instr_url = get_inst_url(instr_urls)
+            print(instr_url)
+
+        else:
+            pass
 
     temperature = st.sidebar.slider(
         'temperature', min_value=0.01, max_value=5.0, value=0.1, step=0.01)
