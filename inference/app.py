@@ -2,7 +2,7 @@ import os
 
 from modules.instructors import Instruction
 from modules.detectors import InstructionProcessor
-from modules.llm_qa import RAGAgent
+from modules.llm_qa import VectorSearcher, RAGAgent
 
 
 # Setup paths
@@ -33,7 +33,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 def main():
     pdf_path = os.path.join(INSTR_DIR, '21_07_3165_i.pdf')
-    pdf_url = "https://rceth.by/NDfiles/instr/24_04_2905_s.pdf"
+    pdf_url = "https://rceth.by//NDfiles/instr/7401_05_10_15_18_20_s.pdf"
     instruction = Instruction(instr_dir=INSTR_DIR,
                               pdf_url=pdf_url)  # , pdf_path=pdf_path)
 
@@ -50,15 +50,24 @@ def main():
     #     text = file.read()
 
     # Get answer using RAG LLM
-    question = "Какие показания к применению?"
+    question = "Какая область применения?"
+    vector_searcher = VectorSearcher(db_name="faiss",
+                                     yandex_api_key=YANDEX_API_KEY,
+                                     yandex_folder_id=YANDEX_FOLDER_ID,
+                                     chunk_size=1000,
+                                     chunk_overlap=200,
+                                     opensearch_url=OPENSEARCH_HOST,
+                                     opensearch_login=OPENSEARCH_LOGIN,
+                                     opensearch_password=OPENSEARCH_PASSWORD)
+    vectorsearch = vector_searcher.create_vectorsearch(text=text)
+
     rag_agent = RAGAgent(yandex_api_key=YANDEX_API_KEY,
                          yandex_folder_id=YANDEX_FOLDER_ID,
-                         db_name="faiss",
-                         opensearch_login=OPENSEARCH_LOGIN,
-                         opensearch_password=OPENSEARCH_PASSWORD)
+                         temperature=0.8,
+                         max_tokens=3000)
 
-    answer = rag_agent.get_answer(text=text,
-                                  question=question)
+    answer = rag_agent.get_answer(question=question,
+                                  vectorsearch=vectorsearch)
 
     print(answer)
 
