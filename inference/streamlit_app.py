@@ -5,6 +5,8 @@ import pandas as pd
 import streamlit as st
 from streamlit_searchbox import st_searchbox
 
+from modules.streamlit_utils import read_df, search_name, get_instr_url
+
 
 # Setup paths
 HOME = os.getcwd()
@@ -14,39 +16,11 @@ INSTR_DIR = os.path.join(DATA_DIR, 'instructions')
 RCETH_CSV_PATH = os.path.join(DATA_DIR, 'rceth.csv')
 
 # Read csv with instructions
-df = pd.read_csv(RCETH_CSV_PATH, encoding='windows-1251')
-df["full_name"] = df["trade_name"] + " " + \
-    df["dosage_form"] + " " + df["manufacturer"]
+df = read_df(rceth_csv_path=RCETH_CSV_PATH)
 
 # App title
 st.set_page_config(page_title="Medical instruction question app",
                    page_icon="💊", layout="wide")
-
-
-def search_name(name):
-    # Find name in dataframe and create subdataframe
-    contain_names = df['trade_name'].str.contains(name.lower(), case=False)
-    med_series = df.loc[(contain_names) & (
-        df["dosage_form"] != "субстанция"), "full_name"]
-    med_series = med_series.sort_values()
-
-    # Sort values and convert to list
-    names = med_series.to_list()
-
-    return names
-
-
-def get_inst_url(instr_urls):
-    # Split string and strip each instruction
-    instr_urls = instr_urls.split(",")
-    instr_urls = [instr.strip() for instr in instr_urls]
-
-    # Sort instruction by last letter in basename
-    instr_urls.sort(key=lambda x: os.path.splitext(
-        os.path.basename(x))[0][-1])
-
-    return instr_urls[-1]
-
 
 # Change width of sidebar
 st.markdown(
@@ -58,35 +32,44 @@ max-width: 768px;
 }
 </style>
 """,
-    unsafe_allow_html=True
-)
+    unsafe_allow_html=True)
+
+
+def search(name):
+    return search_name(df=df,
+                       name=name)
 
 
 # Sidebar
 with st.sidebar:
+    # Set title of sidebar
     st.title('Chat with Medical Instruction')
+    # Change width of sidebar
+    st.markdown(
+        """
+    <style>
+    [data-testid="stSidebar"][aria-expanded="true"]{
+    width: 500px;
+    max-width: 768px;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True)
 
     # Search
     st.subheader('Лекарственный препарат')
-    text_search = st_searchbox(search_function=search_name,
+    text_search = st_searchbox(search_function=search,
                                placeholder="Введите название ЛП")
 
     if text_search:
         instr_urls = df.loc[df["full_name"] ==
                             text_search, "link_of_instruction"].values[0]
         if instr_urls:
-            instr_url = get_inst_url(instr_urls)
+            instr_url = get_instr_url(instr_urls)
             print(instr_url)
 
         else:
-            pass
-
-    temperature = st.sidebar.slider(
-        'temperature', min_value=0.01, max_value=5.0, value=0.1, step=0.01)
-    top_p = st.sidebar.slider('top_p', min_value=0.01,
-                              max_value=1.0, value=0.9, step=0.01)
-    max_length = st.sidebar.slider(
-        'max_length', min_value=64, max_value=4096, value=512, step=8)
+            instr_url = None
 
     st.markdown(
         '📖 Все инструкции взяты с сайта [«Государственный реестр лекарственных средств Республики Беларусь»](https://rceth.by/Refbank/).')
@@ -94,7 +77,7 @@ with st.sidebar:
 # Store LLM generated responses
 if "messages" not in st.session_state.keys():
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "How may I assist you today?"}]
+        {"role": "assistant", "content": "Что тебя интересует в данной инструкции?"}]
 
 # Display or clear chat messages
 for message in st.session_state["messages"]:
@@ -104,7 +87,7 @@ for message in st.session_state["messages"]:
 
 def clear_chat_history():
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "How may I assist you today?"}]
+        {"role": "assistant", "content": "Что тебя интересует в данной инструкции?"}]
 
 
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
