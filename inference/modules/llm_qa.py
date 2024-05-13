@@ -9,32 +9,47 @@ from langchain.chains import RetrievalQA
 from yandex_chain import YandexEmbeddings, YandexLLM
 
 
-class LLMQA:
-    pass
-
-
 class VectorSearcher:
     def __init__(self,
-                 db_name):
+                 yandex_api_key,
+                 yandex_folder_id,
+                 chunk_size=1000,
+                 chunk_overlap=200,
+                 db_name="faiss",
+                 opensearch_url="localhost",
+                 opensearch_login="admin",
+                 opensearch_password="admin"):
+
         assert db_name in [
             "opensearch", "faiss"], "Database should be in ['opensearch', 'faiss']."
         self.db_name = db_name
 
+        # Text splitter and embeddings
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap)
+
+        self.embeddings = YandexEmbeddings(
+            folder_id=yandex_folder_id, api_key=yandex_api_key)
+
+        self.opensearch_url = opensearch_url
+        self.opensearch_login = opensearch_login
+        self.opensearch_password = opensearch_password
+
     def create_vectorsearch(self,
-                            documents,
-                            embeddings,
-                            opensearch_url='localhost',
-                            opensearch_login='admin',
-                            opensearch_password='admin'):
+                            text):
+        # Get documents
+        documents = self.text_splitter.create_documents([text])
+
         if self.db_name == "faiss":
-            vectorsearch = FAISS.from_documents(documents, embeddings)
+            vectorsearch = FAISS.from_documents(documents, self.embeddings)
 
         elif self.db_name == "opensearch":
             vectorsearch = OpenSearchVectorSearch.from_documents(
                 documents,
-                embeddings,
-                opensearch_url=opensearch_url,
-                http_auth=(opensearch_login, opensearch_password),
+                self.embeddings,
+                opensearch_url=self.opensearch_url,
+                http_auth=(self.opensearch_login, self.opensearch_password),
                 use_ssl=True,
                 verify_certs=False,
                 engine='lucene')
@@ -46,26 +61,11 @@ class RAGAgent:
     def __init__(self,
                  yandex_api_key,
                  yandex_folder_id,
-                 db_name='faiss',
-                 opensearch_login='admin',
-                 opensearch_password='admin',
-                 chunk_size=1000,
-                 chunk_overlap=200,
                  temperature=0.8,
                  max_tokens=3000):
-        # Text splitter
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap)
-
-        # DB
-        self.db_name = db_name
-        self.opensearch_login = opensearch_login
-        self.opensearch_password = opensearch_password
 
         # Embeddings and llm
-        self.embeddings = YandexEmbeddings(
-            folder_id=yandex_folder_id, api_key=yandex_api_key)
+
         self.llm = YandexLLM(api_key=yandex_api_key,
                              folder_id=yandex_folder_id,
                              temperature=temperature,
@@ -87,20 +87,9 @@ class RAGAgent:
         """
         self.prompt = PromptTemplate.from_template(self.template)
 
-        # Retriever
-        self.vector_searcher = VectorSearcher(db_name=self.db_name)
-
     def get_answer(self,
-                   text,
-                   question):
-        # Get documents
-        documents = self.text_splitter.create_documents([text])
-
-        # Get vectorsearch
-        vectorsearch = self.vector_searcher.create_vectorsearch(documents=documents,
-                                                                embeddings=self.embeddings,
-                                                                opensearch_login=self.opensearch_login,
-                                                                opensearch_password=self.opensearch_password)
+                   question,
+                   vectorsearch):
 
         # RetrievalQA
         qa = RetrievalQA.from_chain_type(
