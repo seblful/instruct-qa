@@ -19,7 +19,7 @@ class Instruction:
         self.pdf_url = pdf_url
 
         self.url_regexp = re.compile(
-            r"(https?://)?(www\.)?rceth\.by\/NDfiles\/instr\/[0-9_]*_[isp]\.pdf")
+            r"(https?:\/\/)?(www\.)?rceth\.by[\/]{1,2}NDfiles\/instr\/[0-9_]*_[isp]\.pdf")
 
         # Assert errir if pdf_path and pdf_url is None
         assert pdf_path is not None or pdf_url is not None, "You must specify 'pdf_path' or 'pdf url'"
