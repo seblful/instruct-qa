@@ -38,6 +38,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 # Read csv with instructions
+@st.cache_data(show_spinner=False)
 def read_df(rceth_csv_path):
     df = pd.read_csv(rceth_csv_path, encoding='windows-1251')
     df["full_name"] = df["trade_name"] + " " + \
@@ -121,7 +122,7 @@ def clear_chat_history():
 
 
 # App title
-st.set_page_config(page_title="Medical instruction question app",
+st.set_page_config(page_title="Chat with Medical Instruction",
                    page_icon="💊", layout="wide")
 
 # Change width of sidebar
@@ -136,10 +137,13 @@ max-width: 768px;
 """, unsafe_allow_html=True)
 
 
+if "last_text_search" not in st.session_state.keys():
+    st.session_state["last_text_search"] = ""
+
 # Sidebar
 with st.sidebar:
     # Set title of sidebar
-    st.title('Chat with Medical Instruction')
+    st.title("Chat with Medical Instruction")
 
     # Search
     st.subheader('Лекарственный препарат')
@@ -147,6 +151,11 @@ with st.sidebar:
                                placeholder="Введите название ЛП")
 
     if text_search:
+        if st.session_state["last_text_search"] != text_search:
+            clear_chat_history()
+            st.session_state["last_text_search"] = text_search
+
+        # Get instructions urls
         instr_urls = df.loc[df["full_name"] ==
                             text_search, "link_of_instruction"].values[0]
         if instr_urls:
@@ -163,6 +172,7 @@ with st.sidebar:
     # Clear chat messages
     st.sidebar.button('Очистить историю чата', on_click=clear_chat_history)
 
+    # Markdown
     st.markdown(
         '📖 Все инструкции взяты с сайта [«Государственный реестр лекарственных средств Республики Беларусь»](https://rceth.by/Refbank/).')
 
@@ -176,22 +186,6 @@ for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-
-# Function for generating LLaMA2 response
-def generate_llama2_response(prompt_input):
-    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."
-    for dict_message in st.session_state.messages:
-        if dict_message["role"] == "user":
-            string_dialogue += "User: " + dict_message["content"] + "\n\n"
-        else:
-            string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
-    output = "Output from LLM"
-    # output = replicate.run(llm,
-    #                        input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
-    #                               "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
-    return output
-
-
 # User-provided prompt
 if prompt := st.chat_input(placeholder="Ваш вопрос", disabled=not text_search):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -204,7 +198,7 @@ if st.session_state.messages[-1]["role"] != "assistant":
         with st.spinner("Генерация ответа..."):
             response = rag_agent.get_answer(question=prompt,
                                             vectorsearch=vectorsearch)
-            placeholder = st.empty()
-            placeholder.markdown(response)
-    message = {"role": "assistant", "content": response}
-    st.session_state.messages.append(message)
+        placeholder = st.empty()
+        placeholder.markdown(response)
+        message = {"role": "assistant", "content": response}
+        st.session_state.messages.append(message)
