@@ -198,7 +198,7 @@ if st.session_state.messages[-1]["role"] != "assistant":
         with st.spinner("Генерация ответа..."):
             response = rag_agent.get_answer(question=prompt,
                                             vectorsearch=vectorsearch)
-        placeholder = st.empty()
-        placeholder.markdown(response)
+        st.markdown(response)
+
         message = {"role": "assistant", "content": response}
         st.session_state.messages.append(message)
