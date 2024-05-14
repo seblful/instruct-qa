@@ -96,7 +96,7 @@ def get_instr_url(instr_urls):
     return instr_urls[-1]
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def process_instruction(instr_urls,
                         instr_dir,
                         _instr_processor,
@@ -108,12 +108,16 @@ def process_instruction(instr_urls,
 
     # Extract text from instruction
     text = _instr_processor.extract_text(instruction=instruction)
-    print(text)
 
     # Create vectorsearch
     vectorsearch = _vector_searcher.create_vectorsearch(text=text)
 
     return vectorsearch
+
+
+def clear_chat_history():
+    st.session_state["messages"] = [
+        {"role": "assistant", "content": "Что Вас интересует в данной инструкции?"}]
 
 
 # App title
@@ -154,32 +158,26 @@ with st.sidebar:
                                                    _vector_searcher=vector_searcher)
 
         else:
-            instr_url = None
+            vectorsearch = None
+
+    # Clear chat messages
+    st.sidebar.button('Очистить историю чата', on_click=clear_chat_history)
 
     st.markdown(
         '📖 Все инструкции взяты с сайта [«Государственный реестр лекарственных средств Республики Беларусь»](https://rceth.by/Refbank/).')
 
-# Store LLM generated responses
+# Store UI generated responses
 if "messages" not in st.session_state.keys():
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Что тебя интересует в данной инструкции?"}]
+        {"role": "assistant", "content": "Что Вас интересует в данной инструкции?"}]
 
-# Display or clear chat messages
+# Display chat messages
 for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
 
-def clear_chat_history():
-    st.session_state["messages"] = [
-        {"role": "assistant", "content": "Что Вас интересует в данной инструкции?"}]
-
-
-st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
-
 # Function for generating LLaMA2 response
-
-
 def generate_llama2_response(prompt_input):
     string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."
     for dict_message in st.session_state.messages:
@@ -200,16 +198,13 @@ if prompt := st.chat_input(placeholder="Ваш вопрос", disabled=not text_
     with st.chat_message("user"):
         st.write(prompt)
 
-# # Generate a new response if last message is not from assistant
-# if st.session_state.messages[-1]["role"] != "assistant":
-#     with st.chat_message("assistant"):
-#         with st.spinner("Thinking..."):
-#             response = generate_llama2_response(prompt)
-#             placeholder = st.empty()
-#             full_response = ''
-#             for item in response:
-#                 full_response += item
-#                 placeholder.markdown(full_response)
-#             placeholder.markdown(full_response)
-#     message = {"role": "assistant", "content": full_response}
-#     st.session_state.messages.append(message)
+# Generate a new response if last message is not from assistant
+if st.session_state.messages[-1]["role"] != "assistant":
+    with st.chat_message("assistant"):
+        with st.spinner("Генерация ответа..."):
+            response = rag_agent.get_answer(question=prompt,
+                                            vectorsearch=vectorsearch)
+            placeholder = st.empty()
+            placeholder.markdown(response)
+    message = {"role": "assistant", "content": response}
+    st.session_state.messages.append(message)
