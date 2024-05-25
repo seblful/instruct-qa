@@ -20,7 +20,7 @@ def main():
     dataset_creator = DatasetCreator(raw_data_dir=RAW_DATA_DIR,
                                      images_dir=LS_INPUT_DIR,
                                      dataset_dir=DATASET_DIR,
-                                     train_split=0.8)
+                                     train_split=0.85)
 
     # Creating masks from polygons json and split data into train, val and test datasets
     dataset_creator.process()
