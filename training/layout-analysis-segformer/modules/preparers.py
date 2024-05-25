@@ -185,8 +185,9 @@ class DatasetCreator():
                 polygon = PolygonLabel(points=value['points'],
                                        label=value['polygonlabels'][0])
 
-                # Append labels to lists
-                polygons.append(polygon)
+                # Append labels to lists if label is not Stamp
+                if polygon.label != "Stamp":
+                    polygons.append(polygon)
 
         # Sort polygons
         polygons.sort(key=lambda x: self.label2id[x.label], reverse=True)
