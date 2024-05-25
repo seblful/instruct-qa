@@ -2,7 +2,6 @@ import os
 import time
 import json
 from PIL import Image
-import sys
 
 import numpy as np
 
