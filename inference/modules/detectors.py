@@ -184,7 +184,10 @@ class SegformerLayoutAnalyser:
         return self.__processor
 
     def preprocess_image(self, image_array):
-        image_array = np.dstack([image_array, image_array, image_array])
+        # Add dimension if image is gray
+        if len(image_array.shape) == 2:
+            image_array = np.dstack([image_array, image_array, image_array])
+
         image_tensor = self.processor(image_array, return_tensors="pt")
         image_tensor = image_tensor['pixel_values'].to(self.device)
 
