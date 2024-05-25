@@ -65,7 +65,7 @@ def main():
                                          model_config_path=None,
                                          num_epochs=NUM_EPOCHS,
                                          batch_size=BATCH_SIZE,
-                                         num_workers=2)
+                                         num_workers=NUM_WORKERS)
     # Train model
     segformer_trainer.train()
 
