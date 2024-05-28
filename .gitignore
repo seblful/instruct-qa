@@ -19,6 +19,7 @@ data/instructions
 # Inference
 inference/models
 inference/texts.txt
+inference/test-images
 inference/.env
 
 # Drafts
