@@ -83,6 +83,8 @@ class Instruction:
         for page_index in range(self.instr_pdf.page_count):
             # Get the current page
             page = self.instr_pdf[page_index]
+            # Get page rotation
+            page_rotation = page.rotation
 
             # Get the list of images on the current page
             image_list = page.get_images()
@@ -99,8 +101,13 @@ class Instruction:
                 # Create an Image object from the image data
                 image = Image.open(io.BytesIO(image_data))
 
+                # Change type of image
                 if image_extension != 'jpeg':
                     image = image.convert('RGB')
+
+                # Rotate image
+                if page_rotation != 0:
+                    image = image.rotate(page_rotation)
 
                 # Append image to images list
                 images.append(image)
