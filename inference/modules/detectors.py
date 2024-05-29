@@ -141,15 +141,14 @@ class SegformerLayoutAnalyser:
                           4: (255, 255, 0),
                           5: (255, 0, 255),
                           6: (0, 255, 255),
-                          7: (128, 128, 0),
-                          8: (128, 0, 128)}
+                          7: (128, 128, 0)}
 
     @property
     def model(self):
         if self.__model is None:
             # Load model and checkpoint
             model = SegformerForRegressionMask(config=self.config)
-            checkpoint = torch.load(self.model_path)
+            checkpoint = torch.load(self.model_path, map_location=self.device)
 
             # Create a new state dictionary without the "model." prefix
             new_state_dict = {}
@@ -202,7 +201,7 @@ class SegformerLayoutAnalyser:
             results = self.model(image_tensor)
 
         upsampled_logits = F.interpolate(
-            results.logits, size=image_array.shape, mode="bilinear", align_corners=False)
+            results.logits, size=image_array.shape[0:2], mode="bilinear", align_corners=False)
         pred_mask = upsampled_logits.argmax(dim=1)[0].cpu().numpy()
 
         return pred_mask
@@ -211,7 +210,8 @@ class SegformerLayoutAnalyser:
                        image_array,
                        pred_mask):
         # Convert image to 3d
-        image_array = np.dstack([image_array, image_array, image_array])
+        if len(image_array.shape) == 2:
+            image_array = np.dstack([image_array, image_array, image_array])
 
         # Fill mask with colors
         color_mask = np.zeros(pred_mask.shape + (3,))
