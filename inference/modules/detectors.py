@@ -348,60 +348,10 @@ class ImagePreprocessor:
                                              alpha=1)
 
         # Extract subset of cleaned image defined by mask from layout analysis
-        image_array = self.apply_la_mask(image_array=image_array,
+        cleaned_img = self.apply_la_mask(image_array=image_array,
                                          cleaned_img=cleaned_img)
 
-        return image_array
-
-
-class TesseractOCR:
-    def __init__(self):
-        self.ocr_languages = 'rus'
-
-    def ocr_image(self, image_array):
-        text = pytesseract.image_to_string(image=image_array,
-                                           lang=self.ocr_languages,
-                                           output_type='string')
-
-        return text
-
-    def clean_text(self, text):
-        re.sub(r'\n+', '\n', text)
-        text = re.sub(r'\s+', ' ', text)
-
-        return text
-
-    def osd_image(self, image_array):
-        result = pytesseract.image_to_osd(image=image_array,
-                                          lang=self.ocr_languages,
-                                          output_type='dict')
-
-        return result
-
-    def rotate_image(self, image_array):
-        # Get information about osd image
-        osd_result = self.osd_image(image_array=image_array)
-
-        # Rotate image if need
-        rotate_angle = osd_result['rotate']
-
-        if rotate_angle > 0:
-            image_array = np.rot90(image_array, k=rotate_angle // 90)
-
-        return image_array
-
-    def extract_text(self, image_array):
-
-        # Rotate image if need
-        image_array = self.rotate_image(image_array=image_array)
-
-        # Extract text
-        text = self.ocr_image(image_array=image_array)
-
-        # Clean text
-        text = self.clean_text(text=text)
-
-        return text
+        return cleaned_img
 
 
 class InstructionProcessor:
@@ -426,28 +376,12 @@ class InstructionProcessor:
 
         # Iterating through images in instruction
         for image in instruction.instr_imgs:
-            image_array = np.array(image)
-
-            # Clean image and stamp remove
-            # Predict stamps with yolo
-            yolo_results = self.yolo_stamp_det.predict(image)
-            yolo_bboxes = yolo_results[0].obb.xyxyxyxy.detach(
-            ).cpu().numpy().astype(np.int32)
-            # Clean image
-            clean_image_array = self.image_processor.process(image_array=image_array,
-                                                             bboxes=yolo_bboxes)
-
-            # # Layout analysis
-            # pred_la_mask = self.segformer_la.predict(
-            #     image_array=image_array)
-
-            # # Visualize layout analysis prediction
-            # self.segformer_la.visualize_mask(image_array=image_array,
-            #                                  pred_mask=pred_la_mask)
+            # Preprocess image (Stamp removal, Layout Analysis)
+            cleaned_img = self.image_preprocessor.process(image=image)
 
             # Extract text
             text = self.tesseract_ocr.extract_text(
-                image_array=clean_image_array)
+                image_array=cleaned_img)
             # Add text to all text
             all_text += text
 
