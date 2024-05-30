@@ -50,8 +50,8 @@ class YOLOStampDetector:
 
         return self.__model
 
-    def predict(self, image):
-        results = self.model(image)
+    def predict(self, image, verbose=False):
+        results = self.model(image, verbose=verbose)
 
         return results
 
@@ -229,7 +229,29 @@ class SegformerLayoutAnalyser:
         return blend_image
 
 
-class ImageCleaner:
+class ImagePreprocessor:
+    def __init__(self,
+                 yolo_stamp_det_model_path,
+                 segformer_la_model_path,
+                 segformer_la_config_path):
+
+        # Detection, LA models
+        self.yolo_stamp_det = YOLOStampDetector(model_path=yolo_stamp_det_model_path,
+                                                model_type='n')
+
+        self.segformer_la = SegformerLayoutAnalyser(model_path=segformer_la_model_path,
+                                                    config_path=segformer_la_config_path)
+
+        # Define the target classes you want to extract
+        self.target_classes = [1, 2, 3, 4]
+
+    def convert_image_to_3d(self,
+                            image_array):
+        if len(image_array.shape) == 2:
+            image_array = np.dstack([image_array, image_array, image_array])
+
+        return image_array
+
     def convert_scale_abs(self,
                           roi,
                           alpha,
@@ -250,10 +272,16 @@ class ImageCleaner:
         return converted_image
 
     def clean_roi_of_image(self,
+                           image,
                            image_array,
-                           bboxes,
                            alpha=3,
                            beta=0):
+
+        # Predict stamps with yolo
+        results = self.yolo_stamp_det.predict(image)
+        bboxes = results[0].obb.xyxyxyxy.detach(
+        ).cpu().numpy().astype(np.int32)
+
         # Create a mask for the bounding box region
         mask = np.zeros_like(image_array)
 
@@ -276,15 +304,52 @@ class ImageCleaner:
 
         return converted_image
 
-    def process(self, image_array, bboxes):
+    def apply_la_mask(self,
+                      image_array,
+                      cleaned_img):
+        # Layout analysis
+        la_mask = self.segformer_la.predict(
+            image_array=image_array)
+
+        # # Visualize layout analysis prediction
+        # self.segformer_la.visualize_mask(image_array=image_array,
+        #                                  pred_mask=pred_la_mask)
+
+        # Create a white background image
+        white_background = np.ones_like(image_array) * 255
+
+        # Create a mask for the target classes
+        target_mask = np.isin(la_mask, self.target_classes).astype(np.uint8)
+
+        # Extract the relevant parts from the original image
+        masked = cv2.bitwise_and(
+            image_array, image_array, mask=target_mask)
+
+        # Paste the extracted parts onto the white background
+        cleaned_img = cv2.bitwise_and(
+            white_background, masked, white_background, mask=target_mask)
+
+        return cleaned_img
+
+    def process(self, image):
+        # Create image array and copy of it
+        image_array = np.array(image)
+
+        # Convert image array to 3d
+        image_array = self.convert_image_to_3d(image_array=image_array)
+
         # Clean roi
-        image_array = self.clean_roi_of_image(image_array=image_array,
-                                              bboxes=bboxes,
+        cleaned_img = self.clean_roi_of_image(image=image,
+                                              image_array=image_array,
                                               alpha=4)
 
         # Clean the whole image
-        image_array = self.clean_whole_image(image_array=image_array,
+        cleaned_img = self.clean_whole_image(image_array=cleaned_img,
                                              alpha=1)
+
+        # Extract subset of cleaned image defined by mask from layout analysis
+        image_array = self.apply_la_mask(image_array=image_array,
+                                         cleaned_img=cleaned_img)
 
         return image_array
 
@@ -348,17 +413,10 @@ class InstructionProcessor:
         # Paths
         self.instr_dir = instr_dir
 
-        # Detection, LA, OCR models
-        self.yolo_stamp_det = YOLOStampDetector(model_path=yolo_stamp_det_model_path,
-                                                model_type='n')
-
-        self.segformer_la = SegformerLayoutAnalyser(model_path=segformer_la_model_path,
-                                                    config_path=segformer_la_config_path)
-
-        self.tesseract_ocr = TesseractOCR()
-
-        # Image processor
-        self.image_processor = ImageCleaner()
+        # Image preprocessor
+        self.image_preprocessor = ImagePreprocessor(yolo_stamp_det_model_path=yolo_stamp_det_model_path,
+                                                    segformer_la_model_path=segformer_la_model_path,
+                                                    segformer_la_config_path=segformer_la_config_path)
 
     def extract_text(self, instruction):
         # Check if input is Instruction instance
