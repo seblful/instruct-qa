@@ -5,6 +5,8 @@ import pandas as pd
 import streamlit as st
 from streamlit_searchbox import st_searchbox
 
+from marker.models import load_all_models
+
 from modules.instructors import Instruction
 from modules.detectors import InstructionProcessor, ImageProcessor
 from modules.llm_qa import VectorSearcher, RAGAgent
@@ -49,12 +51,22 @@ def read_df(rceth_csv_path):
     return df
 
 
+# Load surya models
+@st.cache_data(show_spinner=False)
+def load_models():
+    surya_model_list = load_all_models()
+
+    return surya_model_list
+
+
 df = read_df(rceth_csv_path=RCETH_CSV_PATH)
+surya_model_list = load_models()
 
 # Load processor for image processing
 image_processor = ImageProcessor(yolo_stamp_det_model_path=YOLO_STAMP_DET_MODEL_PATH,
                                  segformer_la_model_path=SEGFORMER_LA_MODEL_PATH,
-                                 segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH)
+                                 segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH,
+                                 surya_model_list=surya_model_list)
 
 # Load vectorsearcher and RAG agent
 vector_searcher = VectorSearcher(db_name="faiss",
@@ -103,7 +115,7 @@ def process_instruction(instr_urls,
                         instr_dir,
                         clean_instr_dir,
                         extr_instr_dir,
-                        _instr_processor,
+                        _image_processor,
                         _vector_searcher):
     # Get instruction url and create Instruction instance
     instr_url = get_instr_url(instr_urls)
@@ -113,7 +125,7 @@ def process_instruction(instr_urls,
                               pdf_path_or_url=instr_url)
 
     # Extract text from instruction
-    text = _instr_processor.extract_text(instruction=instruction)
+    text = instruction.extract_text(image_processor=_image_processor)
 
     # Create vectorsearch
     vectorsearch = _vector_searcher.create_vectorsearch(text=text)
