@@ -10,59 +10,93 @@ import fitz
 class Instruction:
     def __init__(self,
                  instr_dir,
-                 pdf_path=None,
-                 pdf_url=None):
+                 pdf_path_or_url):
 
+        # Paths
         self.instr_dir = instr_dir
+        self.pdf_path_or_url = pdf_path_or_url
 
-        self.pdf_path = pdf_path
-        self.pdf_url = pdf_url
+        self.base_url = "https://www.rceth.by/NDfiles/instr/"
+        self.__pdf_path = None
+        self.__pdf_url = None
 
+        # Regexes for path and url
+        self.path_regexp = re.compile(r"^(?!https?:\/\/|www\.).*$")
         self.url_regexp = re.compile(
             r"(https?:\/\/)?(www\.)?rceth\.by[\/]{1,2}NDfiles\/instr\/[0-9_]*_[isp]\.pdf")
 
-        # Assert errir if pdf_path and pdf_url is None
-        assert pdf_path is not None or pdf_url is not None, "You must specify 'pdf_path' or 'pdf url'"
-        self.instr_pdf = self.open_pdf(
-            pdf_path) if pdf_path else self.download_pdf(pdf_url)
+        # self.instr_pdf = self.open_pdf()
 
         self.__instr_imgs = None
 
-    def open_pdf(self, pdf_path):
-        instr_pdf = fitz.open(pdf_path)
+    def input_is_path(self):
+        if self.path_regexp.match(self.pdf_path_or_url):
+            return True
+        return False
+
+    @property
+    def pdf_path(self):
+        if self.__pdf_path is None:
+            if self.input_is_path():
+                self.__pdf_path = self.pdf_path_or_url
+
+            else:
+                self.__pdf_path = os.path.basename(self.pdf_path_or_url)
+
+        return self.__pdf_path
+
+    @property
+    def pdf_url(self):
+        if self.__pdf_url is None:
+            if not self.input_is_path():
+                self.__pdf_url = self.pdf_path_or_url
+
+            else:
+                base_path = os.path.basename(self.pdf_path_or_url)
+                self.__pdf_url = os.path.join(
+                    self.base_url, base_path)
+
+        return self.__pdf_url
+
+    def open_pdf(self):
+        if self.path_regexp.match(self.pdf_path_or_url):
+            full_pdf_path = os.path.join(self.instr_dir, self.pdf_path_or_url)
+            instr_pdf = fitz.open(full_pdf_path)
+
+        else:
+            # Check if url is valid
+            if not self.validate_url(pdf_url=self.pdf_path_or_url):
+                raise ValueError('Url is not valid')
+            # Check if instruction was not downloaded and download if not
+            # Retrieve name of file
+            pdf_path = os.path.basename(self.pdf_path_or_url)
+
+            # Check if instruction was already downloaded
+            if pdf_path not in os.listdir(self.instr_dir):
+                self.download_pdf(pdf_url=self.pdf_path_or_url)
+                print(
+                    "Instruction was not downloaded before, downloading instruction...")
+            else:
+                print("Instruction was previously downloaded, opening instruction...")
+                full_pdf_path = os.path.join(
+                    self.instr_dir, self.pdf_path_or_url)
+                instr_pdf = fitz.open(full_pdf_path)
 
         return instr_pdf
 
     def download_pdf(self, pdf_url):
-        # Check if url is valid
-        if not self.validate_url(url=pdf_url):
-            raise ValueError('Url is not valid')
+        pdf_path = os.path.basename(pdf_url)
+        full_pdf_path = os.path.join(self.instr_dir, pdf_url)
+        # Download instruction
+        res = requests.get(pdf_url)
 
-        # Retrieve name of file
-        instr_name = os.path.basename(pdf_url)
+        with open(full_pdf_path, 'wb') as f:
+            f.write(res.content)
 
-        # Check if instruction was already downloaded
-        if instr_name not in os.listdir(self.instr_dir):
-            print("Instruction was not downloaded before, downloading instruction...")
-            res = requests.get(pdf_url)
-            pdf_path = os.path.join(self.instr_dir, instr_name)
-            with open(pdf_path, 'wb') as f:
-                f.write(res.content)
-            print("Opening instruction...")
-        else:
-            print("Instruction was previously downloaded, opening instruction...")
-            pdf_path = os.path.join(self.instr_dir, instr_name)
+        return None
 
-        # Set pdf path to instance
-        self.pdf_path = pdf_path
-
-        # Open instruction
-        instr_pdf = self.open_pdf(pdf_path)
-
-        return instr_pdf
-
-    def validate_url(self, url):
-        result = self.url_regexp.match(url)
+    def validate_url(self, pdf_url):
+        result = self.url_regexp.match(pdf_url)
 
         if result:
             return True
