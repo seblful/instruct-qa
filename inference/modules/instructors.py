@@ -25,7 +25,7 @@ class Instruction:
         self.url_regexp = re.compile(
             r"(https?:\/\/)?(www\.)?rceth\.by[\/]{1,2}NDfiles\/instr\/[0-9_]*_[isp]\.pdf")
 
-        # self.instr_pdf = self.open_pdf()
+        self.instr_pdf = self.open_pdf()
 
         self.__instr_imgs = None
 
@@ -59,36 +59,27 @@ class Instruction:
         return self.__pdf_url
 
     def open_pdf(self):
-        if self.path_regexp.match(self.pdf_path_or_url):
-            full_pdf_path = os.path.join(self.instr_dir, self.pdf_path_or_url)
-            instr_pdf = fitz.open(full_pdf_path)
+        # Download instruction if it was not previously downloaded
+        if self.pdf_path not in os.listdir(self.instr_dir):
+            print("Instruction was not downloaded before, downloading instruction...")
+            self.download_pdf()
 
-        else:
-            # Check if url is valid
-            if not self.validate_url(pdf_url=self.pdf_path_or_url):
-                raise ValueError('Url is not valid')
-            # Check if instruction was not downloaded and download if not
-            # Retrieve name of file
-            pdf_path = os.path.basename(self.pdf_path_or_url)
-
-            # Check if instruction was already downloaded
-            if pdf_path not in os.listdir(self.instr_dir):
-                self.download_pdf(pdf_url=self.pdf_path_or_url)
-                print(
-                    "Instruction was not downloaded before, downloading instruction...")
-            else:
-                print("Instruction was previously downloaded, opening instruction...")
-                full_pdf_path = os.path.join(
-                    self.instr_dir, self.pdf_path_or_url)
-                instr_pdf = fitz.open(full_pdf_path)
+        # Create full pdf path and open instruction
+        full_pdf_path = os.path.join(self.instr_dir, self.pdf_path)
+        instr_pdf = fitz.open(full_pdf_path)
 
         return instr_pdf
 
-    def download_pdf(self, pdf_url):
-        pdf_path = os.path.basename(pdf_url)
-        full_pdf_path = os.path.join(self.instr_dir, pdf_url)
+    def download_pdf(self):
+        # Validate url
+        if not self.validate_url(pdf_url=self.pdf_url):
+            raise ValueError('Url is not valid')
+
+        # Create full pdf path
+        full_pdf_path = os.path.join(self.instr_dir, self.pdf_path)
+
         # Download instruction
-        res = requests.get(pdf_url)
+        res = requests.get(self.pdf_url)
 
         with open(full_pdf_path, 'wb') as f:
             f.write(res.content)
