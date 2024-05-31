@@ -6,7 +6,7 @@ import streamlit as st
 from streamlit_searchbox import st_searchbox
 
 from modules.instructors import Instruction
-from modules.detectors import InstructionProcessor
+from modules.detectors import InstructionProcessor, ImageProcessor
 from modules.llm_qa import VectorSearcher, RAGAgent
 
 
@@ -15,6 +15,8 @@ HOME = os.getcwd()
 
 DATA_DIR = os.path.abspath(os.path.join(os.pardir, 'data'))
 INSTR_DIR = os.path.join(DATA_DIR, 'instructions')
+CLEAN_INSTR_DIR = os.path.join(DATA_DIR, "clean-instructions")
+EXTR_INSTR_DIR = os.path.join(DATA_DIR, "extracted-instructions")
 RCETH_CSV_PATH = os.path.join(DATA_DIR, 'rceth.csv')
 
 # Models
@@ -49,11 +51,10 @@ def read_df(rceth_csv_path):
 
 df = read_df(rceth_csv_path=RCETH_CSV_PATH)
 
-# Load processor for text extraction
-instr_processor = InstructionProcessor(instr_dir=INSTR_DIR,
-                                       yolo_stamp_det_model_path=YOLO_STAMP_DET_MODEL_PATH,
-                                       segformer_la_model_path=SEGFORMER_LA_MODEL_PATH,
-                                       segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH)
+# Load processor for image processing
+image_processor = ImageProcessor(yolo_stamp_det_model_path=YOLO_STAMP_DET_MODEL_PATH,
+                                 segformer_la_model_path=SEGFORMER_LA_MODEL_PATH,
+                                 segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH)
 
 # Load vectorsearcher and RAG agent
 vector_searcher = VectorSearcher(db_name="faiss",
@@ -100,12 +101,16 @@ def get_instr_url(instr_urls):
 @st.cache_data(show_spinner=False)
 def process_instruction(instr_urls,
                         instr_dir,
+                        clean_instr_dir,
+                        extr_instr_dir,
                         _instr_processor,
                         _vector_searcher):
     # Get instruction url and create Instruction instance
     instr_url = get_instr_url(instr_urls)
     instruction = Instruction(instr_dir=instr_dir,
-                              pdf_url=instr_url)
+                              clean_instr_dir=clean_instr_dir,
+                              extr_instr_dir=extr_instr_dir,
+                              pdf_path_or_url=instr_url)
 
     # Extract text from instruction
     text = _instr_processor.extract_text(instruction=instruction)
@@ -163,6 +168,8 @@ with st.sidebar:
                 # Process instructions urls, extract text and create vectorsearch
                 vectorsearch = process_instruction(instr_urls=instr_urls,
                                                    instr_dir=INSTR_DIR,
+                                                   clean_instr_dir=CLEAN_INSTR_DIR,
+                                                   extr_instr_dir=EXTR_INSTR_DIR,
                                                    _instr_processor=instr_processor,
                                                    _vector_searcher=vector_searcher)
 
