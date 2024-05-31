@@ -6,6 +6,8 @@ from PIL import Image
 
 import fitz
 
+from marker.convert import convert_single_pdf
+
 
 class Instruction:
     def __init__(self,
@@ -25,6 +27,9 @@ class Instruction:
         self.__pdf_url = None
         self.__md_path = None
 
+        # Languages
+        self.languages = ["Russian", "English"]
+
         # Regexes for path and url
         self.path_regexp = re.compile(r"^(?!https?:\/\/|www\.).*$")
         self.url_regexp = re.compile(
@@ -36,6 +41,8 @@ class Instruction:
         self.__instr_imgs = None
 
         self.was_cleaned = os.path.exists(
+            os.path.join(self.clean_instr_dir, self.pdf_path))
+        self.was_extracted = os.path.exists(
             os.path.join(self.clean_instr_dir, self.md_path))
 
     def input_is_path(self):
@@ -164,9 +171,7 @@ class Instruction:
 
         # Iterate through all the images and clean it
         for image in self.instr_imgs:
-            # cleaned_img = image_processor.process(image)
-            import numpy as np
-            cleaned_img = np.array(image)
+            cleaned_img = image_processor.process(image)
             cleaned_images.append(cleaned_img)
 
         # Save cleaned images as cleaned instruction
@@ -176,19 +181,33 @@ class Instruction:
 
     def save_pdf(self, images):
         # Create a new PDF document
-        pdf_doc = fitz.open()
+        full_pdf_path = os.path.join(self.clean_instr_dir, self.pdf_path)
+        images[0].save(full_pdf_path, save_all=True, append_images=images[1:])
 
-        # Iterate over the images
-        for img in images:
-            height, width, _ = img.shape
-            img_rect = fitz.Rect(0, 0, width, height)
-            page = pdf_doc.new_page(width=width, height=height)
+        return None
 
-            # Convert the NumPy array to a Pixmap object
-            pixmap = fitz.Pixmap(fitz.csRGB, img.tobytes(), width, height)
+    def extract_text(self,
+                     image_processor):
+        # Clean instruction
+        if self.was_cleaned == False:
+            print("Cleaning instruction...")
+            self.clean_instr(image_processor=image_processor)
+            self.was_cleaned = True
 
-            # Insert the image on the page
-            page.insert_image(page.rect, pixmap=pixmap)
+        # Extract text and save as markdown
+        if self.was_extracted == False:
 
-        # Save the PDF document
-        pdf_doc.save("output.pdf")
+            # Extract text
+            print("Extracting text from instructions")
+            full_pdf_path = os.path.join(self.clean_instr_dir, self.pdf_path)
+            full_text, _, _ = convert_single_pdf(fname=full_pdf_path,
+                                                 model_lst=image_processor.surya_model_list,
+                                                 langs=self.languages)
+            self.was_extracted = True
+
+            # Save markdown
+            full_md_path = os.path.join(self.extr_instr_dir, self.md_path)
+            with open(full_md_path, "w+", encoding='utf-8') as f:
+                f.write(full_text)
+
+            return full_text
