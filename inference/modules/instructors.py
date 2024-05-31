@@ -11,11 +11,13 @@ class Instruction:
     def __init__(self,
                  instr_dir,
                  clean_instr_dir,
+                 extr_instr_dir,
                  pdf_path_or_url):
 
         # Paths
         self.instr_dir = instr_dir
         self.clean_instr_dir = clean_instr_dir
+        self.extr_instr_dir = extr_instr_dir
         self.pdf_path_or_url = pdf_path_or_url
 
         self.base_url = "https://www.rceth.by/NDfiles/instr/"
@@ -30,6 +32,7 @@ class Instruction:
 
         self.instr_pdf = self.open_pdf()
 
+        # Images from instruction
         self.__instr_imgs = None
 
         self.was_cleaned = os.path.exists(
@@ -112,11 +115,11 @@ class Instruction:
     @property
     def instr_imgs(self):
         if self.__instr_imgs is None:
-            self.__instr_imgs = self.extract_images()
+            self.__instr_imgs = self.__extract_images()
 
         return self.__instr_imgs
 
-    def extract_images(self):
+    def __extract_images(self):
         # Create empty list to store images
         images = []
         # Iterate through all the pages of the PDF
@@ -153,3 +156,39 @@ class Instruction:
                 images.append(image)
 
         return images
+
+    def clean_instr(self,
+                    image_processor):
+        # Create empty list to store images
+        cleaned_images = []
+
+        # Iterate through all the images and clean it
+        for image in self.instr_imgs:
+            # cleaned_img = image_processor.process(image)
+            import numpy as np
+            cleaned_img = np.array(image)
+            cleaned_images.append(cleaned_img)
+
+        # Save cleaned images as cleaned instruction
+        self.save_pdf(images=cleaned_images)
+
+        return cleaned_images
+
+    def save_pdf(self, images):
+        # Create a new PDF document
+        pdf_doc = fitz.open()
+
+        # Iterate over the images
+        for img in images:
+            height, width, _ = img.shape
+            img_rect = fitz.Rect(0, 0, width, height)
+            page = pdf_doc.new_page(width=width, height=height)
+
+            # Convert the NumPy array to a Pixmap object
+            pixmap = fitz.Pixmap(fitz.csRGB, img.tobytes(), width, height)
+
+            # Insert the image on the page
+            page.insert_image(page.rect, pixmap=pixmap)
+
+        # Save the PDF document
+        pdf_doc.save("output.pdf")
