@@ -10,15 +10,18 @@ import fitz
 class Instruction:
     def __init__(self,
                  instr_dir,
+                 clean_instr_dir,
                  pdf_path_or_url):
 
         # Paths
         self.instr_dir = instr_dir
+        self.clean_instr_dir = clean_instr_dir
         self.pdf_path_or_url = pdf_path_or_url
 
         self.base_url = "https://www.rceth.by/NDfiles/instr/"
         self.__pdf_path = None
         self.__pdf_url = None
+        self.__md_path = None
 
         # Regexes for path and url
         self.path_regexp = re.compile(r"^(?!https?:\/\/|www\.).*$")
@@ -28,6 +31,9 @@ class Instruction:
         self.instr_pdf = self.open_pdf()
 
         self.__instr_imgs = None
+
+        self.was_cleaned = os.path.exists(
+            os.path.join(self.clean_instr_dir, self.md_path))
 
     def input_is_path(self):
         if self.path_regexp.match(self.pdf_path_or_url):
@@ -58,14 +64,23 @@ class Instruction:
 
         return self.__pdf_url
 
+    @property
+    def md_path(self):
+        if self.__md_path is None:
+            self.__md_path = os.path.splitext(self.pdf_path)[0] + ".md"
+
+        return self.__md_path
+
     def open_pdf(self):
+        # Create full pdf path
+        full_pdf_path = os.path.join(self.instr_dir, self.pdf_path)
+
         # Download instruction if it was not previously downloaded
-        if self.pdf_path not in os.listdir(self.instr_dir):
+        if not os.path.exists(full_pdf_path):
             print("Instruction was not downloaded before, downloading instruction...")
             self.download_pdf()
 
-        # Create full pdf path and open instruction
-        full_pdf_path = os.path.join(self.instr_dir, self.pdf_path)
+        # Open instruction
         instr_pdf = fitz.open(full_pdf_path)
 
         return instr_pdf
@@ -73,7 +88,7 @@ class Instruction:
     def download_pdf(self):
         # Validate url
         if not self.validate_url(pdf_url=self.pdf_url):
-            raise ValueError('Url is not valid')
+            raise ValueError('Url is not valid.')
 
         # Create full pdf path
         full_pdf_path = os.path.join(self.instr_dir, self.pdf_path)
