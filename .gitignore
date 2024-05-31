@@ -15,6 +15,7 @@ training/label-studio-formatter/outputs
 data/ls-input-data
 data/instructions
 data/clean-instructions
+data/extracted-instructions
 
 
 # Inference
