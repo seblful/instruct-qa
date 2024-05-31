@@ -252,35 +252,38 @@ class ImageProcessor:
 
         return image_array
 
-    def convert_scale_abs(self,
-                          roi,
-                          alpha,
-                          beta):
-        # Apply cv2.convertScaleAbs to the ROI
-        converted_roi = cv2.convertScaleAbs(roi, alpha=alpha, beta=beta)
-
-        return converted_roi
-
     def clean_whole_image(self,
                           image_array,
                           alpha=1,
                           beta=0):
-        converted_image = self.convert_scale_abs(roi=image_array,
-                                                 alpha=alpha,
-                                                 beta=beta)
+        converted_image = cv2.convertScaleAbs(image_array,
+                                              alpha=alpha,
+                                              beta=beta)
 
         return converted_image
 
-    def clean_roi_of_image(self,
-                           image,
-                           image_array,
-                           alpha=3,
-                           beta=0):
-
+    def detect_stamps(self,
+                      image):
         # Predict stamps with yolo
         results = self.yolo_stamp_det.predict(image)
         bboxes = results[0].obb.xyxyxyxy.detach(
         ).cpu().numpy().astype(np.int32)
+
+        return bboxes
+
+    def analyze_layout(self,
+                       image_array):
+        # Layout analysis
+        la_mask = self.segformer_la.predict(
+            image_array=image_array)
+
+        return la_mask
+
+    def clean_roi_of_image(self,
+                           image_array,
+                           bboxes,
+                           alpha=3,
+                           beta=0):
 
         # Create a mask for the bounding box region
         mask = np.zeros_like(image_array)
@@ -294,9 +297,9 @@ class ImageProcessor:
             roi = cv2.bitwise_and(image_array, mask)
 
             # Apply cv2.convertScaleAbs to the ROI
-            converted_image = self.convert_scale_abs(roi=roi,
-                                                     alpha=alpha,
-                                                     beta=beta)
+            converted_image = cv2.convertScaleAbs(roi,
+                                                  alpha=alpha,
+                                                  beta=beta)
 
             # Update the original image with the processed ROI
             converted_image = np.where(
@@ -306,10 +309,7 @@ class ImageProcessor:
 
     def apply_la_mask(self,
                       image_array,
-                      cleaned_img):
-        # Layout analysis
-        la_mask = self.segformer_la.predict(
-            image_array=image_array)
+                      la_mask):
 
         # # Visualize layout analysis prediction
         # self.segformer_la.visualize_mask(image_array=image_array,
@@ -338,17 +338,23 @@ class ImageProcessor:
         # Convert image array to 3d
         image_array = self.convert_image_to_3d(image_array=image_array)
 
+        # Layout analysis
+        la_mask = self.analyze_layout(image_array=image_array)
+
+        # Detect stamp
+        bboxes = self.detect_stamps(image=image)
+
+        # Extract subset of cleaned image defined by mask from layout analysis
+        cleaned_img = self.apply_la_mask(image_array=image_array,
+                                         la_mask=la_mask)
+
         # Clean roi
-        cleaned_img = self.clean_roi_of_image(image=image,
-                                              image_array=image_array,
+        cleaned_img = self.clean_roi_of_image(image_array=cleaned_img,
+                                              bboxes=bboxes,
                                               alpha=4)
 
         # Clean the whole image
         cleaned_img = self.clean_whole_image(image_array=cleaned_img,
-                                             alpha=1)
+                                             alpha=2)
 
-        # Extract subset of cleaned image defined by mask from layout analysis
-        cleaned_img = self.apply_la_mask(image_array=image_array,
-                                         cleaned_img=cleaned_img)
-
-        return cleaned_img
+        return Image.fromarray(cleaned_img)
