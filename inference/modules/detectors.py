@@ -229,7 +229,7 @@ class SegformerLayoutAnalyser:
         return blend_image
 
 
-class ImagePreprocessor:
+class ImageProcessor:
     def __init__(self,
                  yolo_stamp_det_model_path,
                  segformer_la_model_path,
@@ -352,37 +352,3 @@ class ImagePreprocessor:
                                          cleaned_img=cleaned_img)
 
         return cleaned_img
-
-
-class InstructionProcessor:
-    def __init__(self,
-                 instr_dir,
-                 yolo_stamp_det_model_path,
-                 segformer_la_model_path,
-                 segformer_la_config_path):
-        # Paths
-        self.instr_dir = instr_dir
-
-        # Image preprocessor
-        self.image_preprocessor = ImagePreprocessor(yolo_stamp_det_model_path=yolo_stamp_det_model_path,
-                                                    segformer_la_model_path=segformer_la_model_path,
-                                                    segformer_la_config_path=segformer_la_config_path)
-
-    def extract_text(self, instruction):
-        # Check if input is Instruction instance
-        assert isinstance(instruction, Instruction)
-
-        all_text = ''
-
-        # Iterating through images in instruction
-        for image in instruction.instr_imgs:
-            # Preprocess image (Stamp removal, Layout Analysis)
-            cleaned_img = self.image_preprocessor.process(image=image)
-
-            # Extract text
-            text = self.tesseract_ocr.extract_text(
-                image_array=cleaned_img)
-            # Add text to all text
-            all_text += text
-
-        return all_text
