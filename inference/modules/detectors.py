@@ -233,7 +233,8 @@ class ImageProcessor:
     def __init__(self,
                  yolo_stamp_det_model_path,
                  segformer_la_model_path,
-                 segformer_la_config_path):
+                 segformer_la_config_path,
+                 surya_model_list):
 
         # Detection, LA models
         self.yolo_stamp_det = YOLOStampDetector(model_path=yolo_stamp_det_model_path,
@@ -244,6 +245,9 @@ class ImageProcessor:
 
         # Define the target classes you want to extract
         self.target_classes = [1, 2, 3, 4]
+
+        # Surya model list
+        self.surya_model_list = surya_model_list
 
     def convert_image_to_3d(self,
                             image_array):
