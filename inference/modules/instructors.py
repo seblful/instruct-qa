@@ -6,7 +6,7 @@ from PIL import Image
 
 import fitz
 
-from marker.convert import convert_single_pdf
+import pytesseract
 
 
 class Instruction:
@@ -25,11 +25,7 @@ class Instruction:
         self.base_url = "https://www.rceth.by/NDfiles/instr/"
         self.__pdf_path = None
         self.__pdf_url = None
-        self.__md_path = None
-
-        # Languages
-        self.languages = ["Russian", "English"]
-        self.languages = ["Russian"]
+        self.__txt_path = None
 
         # Regexes for path and url
         self.path_regexp = re.compile(r"^(?!https?:\/\/|www\.).*$")
@@ -44,7 +40,7 @@ class Instruction:
         self.was_cleaned = os.path.exists(
             os.path.join(self.clean_instr_dir, self.pdf_path))
         self.was_extracted = os.path.exists(
-            os.path.join(self.extr_instr_dir, self.md_path))
+            os.path.join(self.extr_instr_dir, self.txt_path))
 
     def input_is_path(self):
         if self.path_regexp.match(self.pdf_path_or_url):
@@ -76,11 +72,11 @@ class Instruction:
         return self.__pdf_url
 
     @property
-    def md_path(self):
-        if self.__md_path is None:
-            self.__md_path = os.path.splitext(self.pdf_path)[0] + ".md"
+    def txt_path(self):
+        if self.__txt_path is None:
+            self.__txt_path = os.path.splitext(self.pdf_path)[0] + ".txt"
 
-        return self.__md_path
+        return self.__txt_path
 
     def open_pdf(self):
         # Create full pdf path
@@ -123,17 +119,17 @@ class Instruction:
     @property
     def instr_imgs(self):
         if self.__instr_imgs is None:
-            self.__instr_imgs = self.__extract_images()
+            self.__instr_imgs = self.extract_images(self.instr_pdf)
 
         return self.__instr_imgs
 
-    def __extract_images(self):
+    def extract_images(self, instr_pdf):
         # Create empty list to store images
         images = []
         # Iterate through all the pages of the PDF
-        for page_index in range(self.instr_pdf.page_count):
+        for page_index in range(instr_pdf.page_count):
             # Get the current page
-            page = self.instr_pdf[page_index]
+            page = instr_pdf[page_index]
             # Get page rotation
             page_rotation = page.rotation
 
@@ -143,7 +139,7 @@ class Instruction:
             # Iterate through the list of images
             for img in image_list:
                 # Extract the image
-                base_image = self.instr_pdf.extract_image(img[0])
+                base_image = instr_pdf.extract_image(img[0])
 
                 # Get the image data and extension
                 image_data = base_image["image"]
@@ -187,6 +183,39 @@ class Instruction:
 
         return None
 
+    def ocr_text(self,
+                 image_processor):
+        # Create full pdf path and open instruction
+        full_pdf_path = os.path.join(self.clean_instr_dir, self.pdf_path)
+        instr_pdf = fitz.open(full_pdf_path)
+
+        # Create empty string to store text
+        text = ""
+
+        # Extract images
+        images = self.extract_images(instr_pdf)
+
+        # Iterate through each image and extract text
+        for image in images:
+            # Use EasyOCR to extract text from the image
+            page_text = pytesseract.image_to_string(image=image,
+                                                    lang=image_processor.tesseract_langs,
+                                                    config=image_processor.tessdata_dir_config)
+
+            # Clean text
+            page_text = self.clean_text(text=page_text)
+
+            # Add text to all text
+            text += page_text
+
+        return text
+
+    def clean_text(self, text):
+        text = re.sub(r'\n+', '\n', text)
+        text = re.sub(r'\s+', ' ', text)
+
+        return text
+
     def extract_text(self,
                      image_processor):
         # Clean instruction
@@ -197,19 +226,14 @@ class Instruction:
 
         # Extract text and save as markdown
         if self.was_extracted == False:
-
             # Extract text
             print("Extracting text from instruction...")
-            full_pdf_path = os.path.join(self.clean_instr_dir, self.pdf_path)
-            full_text, _, _ = convert_single_pdf(fname=full_pdf_path,
-                                                 model_lst=image_processor.surya_model_list,
-                                                 langs=self.languages,
-                                                 batch_multiplier=1)
+            text = self.ocr_text(image_processor=image_processor)
             self.was_extracted = True
 
             # Save markdown
-            full_md_path = os.path.join(self.extr_instr_dir, self.md_path)
-            with open(full_md_path, "w+", encoding='utf-8') as f:
-                f.write(full_text)
+            full_txt_path = os.path.join(self.extr_instr_dir, self.txt_path)
+            with open(full_txt_path, "w", encoding='utf-8') as f:
+                f.write(text)
 
-            return full_text
+            return text
