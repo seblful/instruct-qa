@@ -8,7 +8,7 @@ from streamlit_searchbox import st_searchbox
 from marker.models import load_all_models
 
 from modules.instructors import Instruction
-from modules.detectors import InstructionProcessor, ImageProcessor
+from modules.detectors import ImageProcessor
 from modules.llm_qa import VectorSearcher, RAGAgent
 
 
@@ -40,10 +40,26 @@ OPENSEARCH_PORT = 9200
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+# App title
+st.set_page_config(page_title="Chat with Medical Instruction",
+                   page_icon="💊", layout="wide")
+
+# Change width of sidebar
+st.markdown(
+    """
+<style>
+[data-testid="stSidebar"][aria-expanded="true"]{
+width: 500px;
+max-width: 768px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 
 # Read csv with instructions
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def read_df(rceth_csv_path):
+    print("LOAD DF")
     df = pd.read_csv(rceth_csv_path, encoding='windows-1251')
     df["full_name"] = df["trade_name"] + " " + \
         df["dosage_form"] + " " + df["manufacturer"]
@@ -52,7 +68,7 @@ def read_df(rceth_csv_path):
 
 
 # Load surya models
-@st.cache_data(show_spinner=False)
+@st.cache_resource()
 def load_models():
     surya_model_list = load_all_models()
 
@@ -63,25 +79,27 @@ df = read_df(rceth_csv_path=RCETH_CSV_PATH)
 surya_model_list = load_models()
 
 # Load processor for image processing
-image_processor = ImageProcessor(yolo_stamp_det_model_path=YOLO_STAMP_DET_MODEL_PATH,
-                                 segformer_la_model_path=SEGFORMER_LA_MODEL_PATH,
-                                 segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH,
-                                 surya_model_list=surya_model_list)
+if "image_processor" not in st.session_state:
+    st.session_state["image_processor"] = ImageProcessor(yolo_stamp_det_model_path=YOLO_STAMP_DET_MODEL_PATH,
+                                                         segformer_la_model_path=SEGFORMER_LA_MODEL_PATH,
+                                                         segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH,
+                                                         surya_model_list=surya_model_list)
 
 # Load vectorsearcher and RAG agent
-vector_searcher = VectorSearcher(db_name="faiss",
-                                 yandex_api_key=YANDEX_API_KEY,
-                                 yandex_folder_id=YANDEX_FOLDER_ID,
-                                 chunk_size=1000,
-                                 chunk_overlap=200,
-                                 opensearch_url=OPENSEARCH_HOST,
-                                 opensearch_login=OPENSEARCH_LOGIN,
-                                 opensearch_password=OPENSEARCH_PASSWORD)
-
-rag_agent = RAGAgent(yandex_api_key=YANDEX_API_KEY,
-                     yandex_folder_id=YANDEX_FOLDER_ID,
-                     temperature=0.8,
-                     max_tokens=3000)
+if "vector_searcher" not in st.session_state:
+    st.session_state["vector_searcher"] = VectorSearcher(db_name="faiss",
+                                                         yandex_api_key=YANDEX_API_KEY,
+                                                         yandex_folder_id=YANDEX_FOLDER_ID,
+                                                         chunk_size=1000,
+                                                         chunk_overlap=200,
+                                                         opensearch_url=OPENSEARCH_HOST,
+                                                         opensearch_login=OPENSEARCH_LOGIN,
+                                                         opensearch_password=OPENSEARCH_PASSWORD)
+if "rag_agent" not in st.session_state:
+    st.session_state["rag_agent"] = RAGAgent(yandex_api_key=YANDEX_API_KEY,
+                                             yandex_folder_id=YANDEX_FOLDER_ID,
+                                             temperature=0.8,
+                                             max_tokens=3000)
 
 
 def search_name(name):
@@ -124,11 +142,13 @@ def process_instruction(instr_urls,
                               extr_instr_dir=extr_instr_dir,
                               pdf_path_or_url=instr_url)
 
-    # Extract text from instruction
-    text = instruction.extract_text(image_processor=_image_processor)
+    # Extract text from instruction and save as markdown
+    instruction.extract_text(image_processor=_image_processor)
+    full_md_path = os.path.join(
+        instruction.extr_instr_dir, instruction.md_path)
 
     # Create vectorsearch
-    vectorsearch = _vector_searcher.create_vectorsearch(text=text)
+    vectorsearch = _vector_searcher.create_vectorsearch(md_path=full_md_path)
 
     return vectorsearch
 
@@ -136,22 +156,6 @@ def process_instruction(instr_urls,
 def clear_chat_history():
     st.session_state["messages"] = [
         {"role": "assistant", "content": "Что Вас интересует в данной инструкции?"}]
-
-
-# App title
-st.set_page_config(page_title="Chat with Medical Instruction",
-                   page_icon="💊", layout="wide")
-
-# Change width of sidebar
-st.markdown(
-    """
-<style>
-[data-testid="stSidebar"][aria-expanded="true"]{
-width: 500px;
-max-width: 768px;
-}
-</style>
-""", unsafe_allow_html=True)
 
 
 if "last_text_search" not in st.session_state.keys():
@@ -182,8 +186,8 @@ with st.sidebar:
                                                    instr_dir=INSTR_DIR,
                                                    clean_instr_dir=CLEAN_INSTR_DIR,
                                                    extr_instr_dir=EXTR_INSTR_DIR,
-                                                   _instr_processor=instr_processor,
-                                                   _vector_searcher=vector_searcher)
+                                                   _image_processor=st.session_state["image_processor"],
+                                                   _vector_searcher=st.session_state["vector_searcher"])
 
         else:
             vectorsearch = None
@@ -215,8 +219,8 @@ if prompt := st.chat_input(placeholder="Ваш вопрос", disabled=not text_
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Генерация ответа..."):
-            response = rag_agent.get_answer(question=prompt,
-                                            vectorsearch=vectorsearch)
+            response = st.session_state["rag_agent"].get_answer(question=prompt,
+                                                                vectorsearch=vectorsearch)
         st.markdown(response)
 
         message = {"role": "assistant", "content": response}
