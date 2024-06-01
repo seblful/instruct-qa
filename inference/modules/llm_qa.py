@@ -1,7 +1,7 @@
 from opensearchpy import OpenSearch
 
 from langchain_community.vectorstores import OpenSearchVectorSearch, FAISS
-from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
@@ -37,14 +37,13 @@ class VectorSearcher:
         self.opensearch_password = opensearch_password
 
     def create_vectorsearch(self,
-                            md_path):
+                            txt_path):
         # Load data
-        loader = UnstructuredMarkdownLoader(md_path)
+        loader = TextLoader(txt_path, encoding='utf-8')
         data = loader.load()
 
         # Get documents
         documents = self.text_splitter.split_documents(data)
-        # docs = text_splitter.split_documents(data)
 
         if self.db_name == "faiss":
             vectorsearch = FAISS.from_documents(documents, self.embeddings)
@@ -70,7 +69,6 @@ class RAGAgent:
                  max_tokens=3000):
 
         # Embeddings and llm
-
         self.llm = YandexLLM(api_key=yandex_api_key,
                              folder_id=yandex_folder_id,
                              temperature=temperature,
