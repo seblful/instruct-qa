@@ -1,7 +1,7 @@
 from opensearchpy import OpenSearch
 
-
 from langchain_community.vectorstores import OpenSearchVectorSearch, FAISS
+from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
@@ -37,9 +37,14 @@ class VectorSearcher:
         self.opensearch_password = opensearch_password
 
     def create_vectorsearch(self,
-                            text):
+                            md_path):
+        # Load data
+        loader = UnstructuredMarkdownLoader(md_path)
+        data = loader.load()
+
         # Get documents
-        documents = self.text_splitter.create_documents([text])
+        documents = self.text_splitter.split_documents(data)
+        # docs = text_splitter.split_documents(data)
 
         if self.db_name == "faiss":
             vectorsearch = FAISS.from_documents(documents, self.embeddings)
