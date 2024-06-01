@@ -29,6 +29,7 @@ class Instruction:
 
         # Languages
         self.languages = ["Russian", "English"]
+        self.languages = ["Russian"]
 
         # Regexes for path and url
         self.path_regexp = re.compile(r"^(?!https?:\/\/|www\.).*$")
@@ -43,7 +44,7 @@ class Instruction:
         self.was_cleaned = os.path.exists(
             os.path.join(self.clean_instr_dir, self.pdf_path))
         self.was_extracted = os.path.exists(
-            os.path.join(self.clean_instr_dir, self.md_path))
+            os.path.join(self.extr_instr_dir, self.md_path))
 
     def input_is_path(self):
         if self.path_regexp.match(self.pdf_path_or_url):
@@ -198,11 +199,12 @@ class Instruction:
         if self.was_extracted == False:
 
             # Extract text
-            print("Extracting text from instructions")
+            print("Extracting text from instruction...")
             full_pdf_path = os.path.join(self.clean_instr_dir, self.pdf_path)
             full_text, _, _ = convert_single_pdf(fname=full_pdf_path,
                                                  model_lst=image_processor.surya_model_list,
-                                                 langs=self.languages)
+                                                 langs=self.languages,
+                                                 batch_multiplier=1)
             self.was_extracted = True
 
             # Save markdown
