@@ -5,8 +5,6 @@ import pandas as pd
 import streamlit as st
 from streamlit_searchbox import st_searchbox
 
-from marker.models import load_all_models
-
 from modules.instructors import Instruction
 from modules.detectors import ImageProcessor
 from modules.llm_qa import VectorSearcher, RAGAgent
@@ -59,7 +57,6 @@ max-width: 768px;
 # Read csv with instructions
 @st.cache_data(show_spinner=True)
 def read_df(rceth_csv_path):
-    print("LOAD DF")
     df = pd.read_csv(rceth_csv_path, encoding='windows-1251')
     df["full_name"] = df["trade_name"] + " " + \
         df["dosage_form"] + " " + df["manufacturer"]
@@ -67,23 +64,13 @@ def read_df(rceth_csv_path):
     return df
 
 
-# Load surya models
-@st.cache_resource()
-def load_models():
-    surya_model_list = load_all_models()
-
-    return surya_model_list
-
-
 df = read_df(rceth_csv_path=RCETH_CSV_PATH)
-surya_model_list = load_models()
 
 # Load processor for image processing
 if "image_processor" not in st.session_state:
     st.session_state["image_processor"] = ImageProcessor(yolo_stamp_det_model_path=YOLO_STAMP_DET_MODEL_PATH,
                                                          segformer_la_model_path=SEGFORMER_LA_MODEL_PATH,
-                                                         segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH,
-                                                         surya_model_list=surya_model_list)
+                                                         segformer_la_config_path=SEGFORMER_LA_CONFIG_PATH)
 
 # Load vectorsearcher and RAG agent
 if "vector_searcher" not in st.session_state:
@@ -144,11 +131,11 @@ def process_instruction(instr_urls,
 
     # Extract text from instruction and save as markdown
     instruction.extract_text(image_processor=_image_processor)
-    full_md_path = os.path.join(
-        instruction.extr_instr_dir, instruction.md_path)
+    full_txt_path = os.path.join(
+        instruction.extr_instr_dir, instruction.txt_path)
 
     # Create vectorsearch
-    vectorsearch = _vector_searcher.create_vectorsearch(md_path=full_md_path)
+    vectorsearch = _vector_searcher.create_vectorsearch(txt_path=full_txt_path)
 
     return vectorsearch
 

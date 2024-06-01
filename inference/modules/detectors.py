@@ -1,6 +1,3 @@
-import os
-import re
-
 import numpy as np
 from PIL import Image
 import cv2
@@ -10,9 +7,6 @@ import torch.nn.functional as F
 import ultralytics
 from transformers import SegformerConfig, SegformerImageProcessor
 
-import pytesseract
-
-from modules.instructors import Instruction
 from modules.segformer_model import SegformerForRegressionMask
 
 
@@ -233,8 +227,7 @@ class ImageProcessor:
     def __init__(self,
                  yolo_stamp_det_model_path,
                  segformer_la_model_path,
-                 segformer_la_config_path,
-                 surya_model_list):
+                 segformer_la_config_path):
 
         # Detection, LA models
         self.yolo_stamp_det = YOLOStampDetector(model_path=yolo_stamp_det_model_path,
@@ -246,8 +239,9 @@ class ImageProcessor:
         # Define the target classes you want to extract
         self.target_classes = [1, 2, 3, 4]
 
-        # Surya model list
-        self.surya_model_list = surya_model_list
+        # OCR Reader
+        self.tessdata_dir_config = '--tessdata-dir "C:\\Program Files\\Tesseract-OCR\\tessdata"'
+        self.tesseract_langs = "rus+eng"
 
     def convert_image_to_3d(self,
                             image_array):
