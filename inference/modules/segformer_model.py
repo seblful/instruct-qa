@@ -3,7 +3,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 from transformers import SegformerConfig, SegformerForSemanticSegmentation, SegformerDecodeHead, SegformerModel
 from transformers.modeling_outputs import SemanticSegmenterOutput
