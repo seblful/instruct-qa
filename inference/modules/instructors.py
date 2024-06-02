@@ -199,8 +199,7 @@ class Instruction:
         for image in images:
             # Use EasyOCR to extract text from the image
             page_text = pytesseract.image_to_string(image=image,
-                                                    lang=image_processor.tesseract_langs,
-                                                    config=image_processor.tessdata_dir_config)
+                                                    lang=image_processor.tesseract_langs)
 
             # Clean text
             page_text = self.clean_text(text=page_text)

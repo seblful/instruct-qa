@@ -240,7 +240,6 @@ class ImageProcessor:
         self.target_classes = [1, 2, 3, 4]
 
         # OCR Reader
-        self.tessdata_dir_config = '--tessdata-dir "C:\\Program Files\\Tesseract-OCR\\tessdata"'
         self.tesseract_langs = "rus+eng"
 
     def convert_image_to_3d(self,
